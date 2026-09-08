@@ -1,0 +1,22 @@
+{
+  "name": "@costnote/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "migrate": "tsx src/migrate.ts"
+  },
+  "dependencies": {
+    "@costnote/core": "workspace:*",
+    "dotenv": "^17.0.0",
+    "drizzle-orm": "^0.44.0",
+    "grammy": "^1.39.0",
+    "postgres": "^3.4.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0"
+  }
+}
