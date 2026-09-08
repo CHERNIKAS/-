@@ -1,0 +1,16 @@
+{
+  "name": "costnote",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "pnpm -r test",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
