@@ -1,3 +1,6 @@
 export * from "./currencies.js";
 export * from "./categories.js";
 export * from "./parse.js";
+export * from "./rules.js";
+export * from "./categorize.js";
+export * from "./ai/classify.js";
