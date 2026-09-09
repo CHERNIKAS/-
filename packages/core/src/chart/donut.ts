@@ -90,12 +90,21 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 ${h}" ` +
       `width="${size}" height="${Math.round((size * height) / 100)}">`,
     "<style>",
-    ".bg{fill:#2A1B57}",
     `.tt{fill:#ffffff;font-family:${FONT};font-size:10px;font-weight:600}`,
     `.cp{fill:#b9aee0;font-family:${FONT};font-size:5px}`,
     `.lg{fill:#e7e2f7;font-family:${FONT};font-size:6px}`,
     "</style>",
-    `<rect class="bg" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
+    "<defs>",
+    // Тот же градиент, что в приложении: картинка в чате и экран аппки должны
+    // выглядеть одной вещью, а не двумя разными.
+    '<linearGradient id="bg" x1="0" y1="0" x2="0.75" y2="1">',
+    '<stop offset="0" stop-color="#2A1B57"/>',
+    '<stop offset="0.38" stop-color="#4B2E8C"/>',
+    '<stop offset="0.72" stop-color="#1E5F8F"/>',
+    '<stop offset="1" stop-color="#0E7A6B"/>',
+    "</linearGradient>",
+    "</defs>",
+    `<rect fill="url(#bg)" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
     `<circle cx="${CX}" cy="${CY}" r="${RADIUS}" fill="none" stroke="#ffffff22" stroke-width="${STROKE}"/>`,
     ...arcs,
     `<text x="${CX}" y="${CY + 2}" text-anchor="middle" class="tt">${escapeXml(options.total)}</text>`,
