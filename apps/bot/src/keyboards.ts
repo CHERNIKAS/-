@@ -1,5 +1,5 @@
 import { InlineKeyboard, Keyboard } from "grammy";
-import type { Category } from "./repo/expenses.js";
+import type { Category } from "@costnote/core/data";
 
 /**
  * Реплай-клавиатура: быстрые действия.

@@ -1,7 +1,7 @@
-import type { Currency } from "@costnote/core";
-import { CURRENCIES } from "@costnote/core";
+import type { Currency } from "../index.js";
+import { CURRENCIES } from "../index.js";
 import { and, desc, eq, lte } from "drizzle-orm";
-import { db, schema } from "../db.js";
+import { db, schema } from "./db.js";
 
 /**
  * Курсы к доллару по датам.

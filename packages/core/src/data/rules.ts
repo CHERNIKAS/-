@@ -1,6 +1,6 @@
-import { normalizePattern } from "@costnote/core";
+import { normalizePattern } from "../index.js";
 import { desc, eq, sql } from "drizzle-orm";
-import { db, schema } from "../db.js";
+import { db, schema } from "./db.js";
 
 export type StoredRule = { pattern: string; categoryId: number; slug: string };
 

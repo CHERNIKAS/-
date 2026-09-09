@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { client, db } from "./db.js";
+import { client, db } from "@costnote/core/data";
 
 // Путь считается от самого файла, а не от рабочего каталога: pnpm --filter
 // запускает скрипт из папки пакета, а миграции лежат в корне репозитория.

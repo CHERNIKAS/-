@@ -14,10 +14,10 @@ import {
   setCategory,
   softDelete,
   totalSince,
-} from "../repo/expenses.js";
-import { rateToUsd, today } from "../repo/rates.js";
-import { learnRule } from "../repo/rules.js";
-import type { AppUser } from "../repo/users.js";
+} from "@costnote/core/data";
+import { rateToUsd, today } from "@costnote/core/data";
+import { learnRule } from "@costnote/core/data";
+import type { AppUser } from "@costnote/core/data";
 
 /**
  * Все действия правят одно и то же сообщение.

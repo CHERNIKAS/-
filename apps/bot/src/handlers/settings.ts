@@ -1,7 +1,7 @@
 import { CURRENCIES, type Currency } from "@costnote/core";
 import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
-import { type AppUser, updateUser } from "../repo/users.js";
+import { type AppUser, updateUser } from "@costnote/core/data";
 
 /**
  * Настройки одним сообщением с переключателями.

@@ -1,6 +1,8 @@
-import type { Currency } from "@costnote/core";
+import type { Currency, Period } from "../index.js";
+
+export type { Period };
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { db, schema } from "../db.js";
+import { db, schema } from "./db.js";
 
 /**
  * Агрегаты для аналитики.
@@ -9,8 +11,6 @@ import { db, schema } from "../db.js";
  * Пересчёт в валюту отображения делается один раз наверху, поэтому смена
  * валюты не трогает ни историю, ни эти запросы.
  */
-
-export type Period = { from: string; to: string; label: string };
 
 export type CategoryTotal = {
   slug: string;

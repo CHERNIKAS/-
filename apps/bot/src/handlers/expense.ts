@@ -1,6 +1,6 @@
 import { categorize, classify, type Currency, parseMessage } from "@costnote/core";
 import type { Context } from "grammy";
-import { db, schema } from "../db.js";
+import { db, schema } from "@costnote/core/data";
 import { env } from "../env.js";
 import { expenseCard } from "../format.js";
 import { cardKeyboard } from "../keyboards.js";
@@ -9,11 +9,11 @@ import {
   createExpense,
   listCategories,
   totalSince,
-} from "../repo/expenses.js";
+} from "@costnote/core/data";
 import { refreshPanel } from "../panel.js";
-import { rateToUsd, today } from "../repo/rates.js";
-import { recentCorrections, userRules } from "../repo/rules.js";
-import type { AppUser } from "../repo/users.js";
+import { rateToUsd, today } from "@costnote/core/data";
+import { recentCorrections, userRules } from "@costnote/core/data";
+import type { AppUser } from "@costnote/core/data";
 
 /**
  * Разбор сообщения и сохранение трат.

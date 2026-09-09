@@ -1,6 +1,6 @@
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
-import { db, schema } from "../db.js";
-import { FALLBACK_CATEGORY_SLUG } from "@costnote/core";
+import { db, schema } from "./db.js";
+import { FALLBACK_CATEGORY_SLUG } from "../index.js";
 
 /**
  * Предложения завести категорию.

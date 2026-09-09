@@ -2,12 +2,12 @@ import type { Currency } from "@costnote/core";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Api, Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
-import { db, schema } from "./db.js";
+import { db, schema } from "@costnote/core/data";
 import { moneyShort } from "./format.js";
-import { totalSince } from "./repo/expenses.js";
-import { rateToUsd, refreshRates } from "./repo/rates.js";
-import { pendingSuggestions } from "./repo/suggestions.js";
-import type { AppUser } from "./repo/users.js";
+import { totalSince } from "@costnote/core/data";
+import { rateToUsd, refreshRates } from "@costnote/core/data";
+import { pendingSuggestions } from "@costnote/core/data";
+import type { AppUser } from "@costnote/core/data";
 
 /**
  * Всё, что бот делает сам.

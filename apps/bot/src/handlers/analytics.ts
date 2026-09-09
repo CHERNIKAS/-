@@ -3,10 +3,10 @@ import { Resvg } from "@resvg/resvg-js";
 import { InlineKeyboard, InputFile } from "grammy";
 import type { Context } from "grammy";
 import { escapeHtml, moneyShort } from "../format.js";
-import { PERIOD_KEYS, PERIOD_TITLE, type PeriodKey, buildPeriod } from "../periods.js";
-import { byCategory, byCurrency, expenseCount, totalUsd } from "../repo/analytics.js";
-import { rateToUsd, today } from "../repo/rates.js";
-import type { AppUser } from "../repo/users.js";
+import { PERIOD_KEYS, PERIOD_TITLE, type PeriodKey, buildPeriod } from "@costnote/core";
+import { byCategory, byCurrency, expenseCount, totalUsd } from "@costnote/core/data";
+import { rateToUsd, today } from "@costnote/core/data";
+import type { AppUser } from "@costnote/core/data";
 
 /**
  * Аналитика — одно сообщение с картинкой.

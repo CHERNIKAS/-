@@ -1,7 +1,7 @@
-import { CATEGORY_SEED } from "@costnote/core";
+import { CATEGORY_SEED } from "../index.js";
 import { and, eq } from "drizzle-orm";
-import { db, schema } from "../db.js";
-import { env } from "../env.js";
+import { db, schema } from "./db.js";
+import { env } from "./defaults.js";
 
 export type AppUser = typeof schema.users.$inferSelect;
 

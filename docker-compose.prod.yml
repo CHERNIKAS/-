@@ -43,13 +43,31 @@ services:
       DEFAULT_REMINDER_HOUR: ${DEFAULT_REMINDER_HOUR}
     networks: [internal]
 
-  # Временная заглушка: проверяет, что домен и сертификат подхватились.
-  # Заменится приложением, как только оно будет готово.
-  web:
-    image: nginx:alpine
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    volumes:
-      - ./placeholder:/usr/share/nginx/html:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BOT_TOKEN: ${BOT_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE}
+      DEFAULT_REMINDER_HOUR: ${DEFAULT_REMINDER_HOUR}
+    networks: [internal]
+
+  # Приложение: статика Mini App плюс проксирование /api в соседний контейнер.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
     networks: [internal, coolify]
     labels:
       traefik.enable: "true"

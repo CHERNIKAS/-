@@ -1,11 +1,11 @@
 import type { Currency } from "@costnote/core";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Api } from "grammy";
-import { db, schema } from "./db.js";
+import { db, schema } from "@costnote/core/data";
 import { moneyShort } from "./format.js";
-import { totalSince } from "./repo/expenses.js";
-import { rateToUsd, today } from "./repo/rates.js";
-import type { AppUser } from "./repo/users.js";
+import { totalSince } from "@costnote/core/data";
+import { rateToUsd, today } from "@costnote/core/data";
+import type { AppUser } from "@costnote/core/data";
 
 /**
  * Закреплённая панель с итогом дня и месяца.

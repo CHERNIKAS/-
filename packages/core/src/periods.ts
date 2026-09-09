@@ -1,4 +1,4 @@
-import type { Period } from "./repo/analytics.js";
+export type Period = { from: string; to: string; label: string };
 
 /** Периоды аналитики. Ключ уходит в callback_data, поэтому короткий. */
 export const PERIOD_KEYS = ["day", "week", "d30", "month", "year"] as const;

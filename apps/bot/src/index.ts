@@ -8,12 +8,12 @@ import { handleCallback } from "./handlers/callbacks.js";
 import { handleExpenseMessage } from "./handlers/expense.js";
 import { mainKeyboard } from "./keyboards.js";
 import { refreshPanel } from "./panel.js";
-import { PERIOD_KEYS, type PeriodKey } from "./periods.js";
-import { createCategoryFromSuggestion } from "./repo/suggestions.js";
+import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
+import { createCategoryFromSuggestion } from "@costnote/core/data";
 import { startScheduler } from "./scheduler.js";
-import { listCategories, totalSince } from "./repo/expenses.js";
-import { rateToUsd, refreshRates, today } from "./repo/rates.js";
-import { ensureUser } from "./repo/users.js";
+import { listCategories, totalSince } from "@costnote/core/data";
+import { rateToUsd, refreshRates, today } from "@costnote/core/data";
+import { ensureUser } from "@costnote/core/data";
 
 const bot = new Bot(env.BOT_TOKEN);
 

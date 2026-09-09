@@ -1,6 +1,6 @@
-import type { Currency } from "@costnote/core";
+import type { Currency } from "../index.js";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
-import { db, schema } from "../db.js";
+import { db, schema } from "./db.js";
 
 export type Expense = typeof schema.expenses.$inferSelect;
 export type Category = typeof schema.categories.$inferSelect;
