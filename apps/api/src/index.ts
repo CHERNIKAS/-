@@ -27,6 +27,7 @@ import {
   leaveLedger,
   ledgersOf,
   listRecurring,
+  removeMember,
   membersOf,
   learnRule,
   listCategories,
@@ -381,8 +382,33 @@ app.delete("/api/expenses/:id", async (request, reply) => {
   }
 
   await softDelete(id);
+
+  // Карточка этой траты в чате должна исчезнуть вместе с ней: иначе в боте
+  // остаётся сообщение о трате, которой уже нет.
+  await removeExpenseCards(id).catch(() => undefined);
+
   return { ok: true };
 });
+
+/** Удаляет из чата карточки бота, привязанные к трате. */
+async function removeExpenseCards(expenseId: number): Promise<void> {
+  const cards = await db.query.botMessages.findMany({
+    where: and(eq(schema.botMessages.expenseId, expenseId), isNull(schema.botMessages.cleanedAt)),
+  });
+
+  for (const card of cards) {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: card.chatId, message_id: card.messageId }),
+    }).catch(() => undefined);
+
+    await db
+      .update(schema.botMessages)
+      .set({ cleanedAt: new Date() })
+      .where(eq(schema.botMessages.id, card.id));
+  }
+}
 
 app.get("/api/analytics", async (request) => {
   const query = z
@@ -716,7 +742,11 @@ app.get("/api/ledgers", async (request) => {
         : {
             title: shared.title,
             link: `https://t.me/${BOT_USERNAME}?start=join_${shared.inviteToken}`,
-            members: (await membersOf(shared.id)).map((m) => ({ name: m.name, role: m.role })),
+            members: (await membersOf(shared.id)).map((m) => ({
+              userId: m.userId,
+              name: m.name,
+              role: m.role,
+            })),
           },
   };
 });
@@ -742,6 +772,24 @@ app.post("/api/ledgers/active", async (request) => {
   if (target === undefined) return { ok: false };
 
   await updateUser(request.user.id, { activeLedgerId: target.id });
+  return { ok: true };
+});
+
+app.delete("/api/ledgers/members/:userId", async (request, reply) => {
+  const { userId } = z.object({ userId: z.coerce.number() }).parse(request.params);
+  const shared = (await ledgersOf(request.user.id)).find((l) => l.isShared);
+
+  if (shared === undefined) {
+    await reply.code(404).send({ error: "общего бюджета нет" });
+    return;
+  }
+
+  const removed = await removeMember(shared.id, request.user.id, userId);
+  if (!removed) {
+    await reply.code(403).send({ error: "убрать участника может только создатель" });
+    return;
+  }
+
   return { ok: true };
 });
 

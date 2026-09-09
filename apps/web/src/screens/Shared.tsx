@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type SharedState } from "../api.js";
+import { SwipeRow } from "../SwipeRow.js";
 import { notify, tap } from "../telegram.js";
 
 /**
@@ -67,15 +68,31 @@ export function Shared({ onChanged }: { onChanged: () => void }) {
       </div>
 
       <div className="card rows" style={{ padding: "2px 16px", marginBottom: 16 }}>
-        {state.shared.members.map((member) => (
-          <div key={member.name + member.role} className="item">
-            <span className="tile">{member.name.slice(0, 1).toUpperCase()}</span>
-            <span className="grow">
-              <span className="title">{member.name}</span>
-              <span className="sub">{member.role === "owner" ? "создал" : "участник"}</span>
-            </span>
-          </div>
-        ))}
+        {state.shared.members.map((member) =>
+          member.role === "owner" ? (
+            <div key={member.userId} className="item">
+              <span className="tile">{member.name.slice(0, 1).toUpperCase()}</span>
+              <span className="grow">
+                <span className="title">{member.name}</span>
+                <span className="sub">создал</span>
+              </span>
+            </div>
+          ) : (
+            <SwipeRow
+              key={member.userId}
+              label="Убрать"
+              onDelete={() => act(() => api.removeMember(member.userId))}
+            >
+              <div className="item">
+                <span className="tile">{member.name.slice(0, 1).toUpperCase()}</span>
+                <span className="grow">
+                  <span className="title">{member.name}</span>
+                  <span className="sub">участник · смахни влево, чтобы убрать</span>
+                </span>
+              </div>
+            </SwipeRow>
+          ),
+        )}
       </div>
 
       <p className="label" style={{ margin: "0 2px 10px" }}>

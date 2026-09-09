@@ -117,6 +117,19 @@ export async function joinLedger(ledgerId: number, userId: number): Promise<void
     .onConflictDoNothing();
 }
 
+/** Владелец может убрать участника; себя убрать нельзя — это выход из книги. */
+export async function removeMember(
+  ledgerId: number,
+  ownerId: number,
+  memberId: number,
+): Promise<boolean> {
+  const ledger = await db.query.ledgers.findFirst({ where: eq(schema.ledgers.id, ledgerId) });
+  if (!ledger || ledger.ownerId !== ownerId || memberId === ownerId) return false;
+
+  await leaveLedger(ledgerId, memberId);
+  return true;
+}
+
 export async function leaveLedger(ledgerId: number, userId: number): Promise<void> {
   await db
     .delete(schema.ledgerMembers)

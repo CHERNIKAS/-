@@ -48,7 +48,7 @@ export function PeriodPicker({
       </div>
 
       {editing && (
-        <div className="sheet" onClick={() => setEditing(false)}>
+        <div className="sheet short" onClick={() => setEditing(false)}>
           <div onClick={(e) => e.stopPropagation()}>
             <div className="grabber" />
             <p className="label" style={{ marginBottom: 14 }}>

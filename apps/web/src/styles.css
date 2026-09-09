@@ -319,6 +319,12 @@ svg {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Короткие шторки — по содержимому: растягивать выбор валюты на весь экран незачем. */
+.sheet.short > div {
+  height: auto;
+  max-height: 76dvh;
+}
+
 .sheet {
   position: fixed;
   inset: 0;
@@ -331,8 +337,11 @@ svg {
 
 .sheet > div {
   width: 100%;
-  max-height: 88dvh;
+  /* Шторка открывается почти во весь экран: иначе длинную карточку траты
+     приходится каждый раз доскроливать снизу вверх. */
+  height: 92dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 18px calc(22px + env(safe-area-inset-bottom));
   border-radius: 26px 26px 0 0;
   background: #2e1e5e;

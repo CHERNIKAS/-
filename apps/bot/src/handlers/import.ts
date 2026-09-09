@@ -1,10 +1,5 @@
-import {
-  type Currency,
-  applyMapping,
-  detectMapping,
-  findRule,
-  readStatement,
-} from "@costnote/core";
+import { type Currency, findRule } from "@costnote/core";
+import { applyMapping, detectMapping, readStatement } from "@costnote/core/import";
 import {
   type AppUser,
   createImportPreview,

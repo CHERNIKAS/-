@@ -30,6 +30,15 @@ export function App() {
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared">("settings");
 
+  const removeExpense = useCallback(
+    async (id: number) => {
+      await api.remove(id);
+      notify("success");
+      setState(await api.state());
+    },
+    [],
+  );
+
   const reload = useCallback(async () => {
     try {
       setState(await api.state());
@@ -59,7 +68,12 @@ export function App() {
   return (
     <>
       {tab === "home" && (
-        <Home state={state} onExpense={setEditing} onCurrency={() => setPickingCurrency(true)} />
+        <Home
+          state={state}
+          onExpense={setEditing}
+          onCurrency={() => setPickingCurrency(true)}
+          onDelete={removeExpense}
+        />
       )}
       {tab === "stats" && <Analytics currency={state.user.currency} today={state.today} />}
       {tab === "history" && (
@@ -68,6 +82,7 @@ export function App() {
           today={state.today}
           currency={state.user.currency}
           onExpense={setEditing}
+          onDelete={removeExpense}
         />
       )}
       {tab === "settings" && (
@@ -177,7 +192,7 @@ export function App() {
       </nav>
 
       {pickingCurrency && (
-        <div className="sheet" onClick={() => setPickingCurrency(false)}>
+        <div className="sheet short" onClick={() => setPickingCurrency(false)}>
           <div onClick={(e) => e.stopPropagation()}>
             <div className="grabber" />
             <p className="label" style={{ marginBottom: 6 }}>

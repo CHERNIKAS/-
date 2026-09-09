@@ -61,7 +61,7 @@ export type SharedState = {
   shared: {
     title: string;
     link: string;
-    members: { name: string; role: string }[];
+    members: { userId: number; name: string; role: string }[];
   } | null;
 };
 
@@ -159,6 +159,9 @@ export const api = {
     }),
 
   leaveLedger: () => request<{ ok: boolean }>("/ledgers/leave", { method: "POST" }),
+
+  removeMember: (userId: number) =>
+    request<{ ok: true }>(`/ledgers/members/${userId}`, { method: "DELETE" }),
 
   categories: () =>
     request<{ limit: number; categories: { slug: string; title: string; emoji: string; count: number; total: number }[] }>(

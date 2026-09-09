@@ -1,5 +1,6 @@
 import type { Expense, State } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
+import { SwipeRow } from "../SwipeRow.js";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 
@@ -14,10 +15,12 @@ export function Home({
   state,
   onExpense,
   onCurrency,
+  onDelete,
 }: {
   state: State;
   onExpense: (expense: Expense) => void;
   onCurrency: () => void;
+  onDelete: (id: number) => Promise<void>;
 }) {
   const { user, totals, recent, today } = state;
   const budget = user.monthlyBudget;
@@ -88,7 +91,8 @@ export function Home({
           recent.slice(0, 12).map((expense, index) => {
             const color = categoryColor(expense.category?.slug, state.categories);
             return (
-              <button key={expense.id} className="item" onClick={() => onExpense(expense)}>
+              <SwipeRow key={expense.id} onDelete={() => onDelete(expense.id)}>
+              <button className="item" onClick={() => onExpense(expense)}>
                 <span className="tile" style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}>
                   <CategoryIcon slug={expense.category?.slug} />
                 </span>
@@ -111,6 +115,7 @@ export function Home({
                 </span>
                 <span hidden>{index}</span>
               </button>
+              </SwipeRow>
             );
           })
         )}

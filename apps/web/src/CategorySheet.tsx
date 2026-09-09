@@ -57,6 +57,17 @@ export function CategorySheet({
       <div onClick={(e) => e.stopPropagation()}>
         <div className="grabber" />
 
+        <button
+          className="pill ghost"
+          style={{ marginBottom: 12 }}
+          onClick={() => {
+            tap();
+            onClose();
+          }}
+        >
+          ← Назад
+        </button>
+
         <div style={{ position: "relative", marginBottom: 14 }}>
           <span style={{ position: "absolute", left: 15, top: 17, color: "var(--ink-3)" }}>
             <IconSearch />

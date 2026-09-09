@@ -3,6 +3,7 @@ import { api, type Expense } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
 import { PeriodPicker } from "../PeriodPicker.js";
 import { type Range, rangeFor, rangeTitle } from "../periods.js";
+import { SwipeRow } from "../SwipeRow.js";
 import { CategoryIcon, IconSearch } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 
@@ -23,11 +24,13 @@ export function History({
   today,
   currency,
   onExpense,
+  onDelete,
 }: {
   categories: { slug: string; title: string; emoji: string }[];
   today: string;
   currency: string;
   onExpense: (expense: Expense) => void;
+  onDelete: (id: number) => Promise<void>;
 }) {
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [query, setQuery] = useState("");
@@ -182,7 +185,8 @@ export function History({
 
           <div className="card rows" style={{ padding: "2px 16px" }}>
             {list.map((expense) => (
-              <button key={expense.id} className="item" onClick={() => onExpense(expense)}>
+              <SwipeRow key={expense.id} onDelete={() => onDelete(expense.id)}>
+              <button className="item" onClick={() => onExpense(expense)}>
                 <span
                   className="tile"
                   style={{
@@ -208,6 +212,7 @@ export function History({
                   )}
                 </span>
               </button>
+              </SwipeRow>
             ))}
           </div>
         </div>

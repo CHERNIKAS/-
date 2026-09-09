@@ -13,6 +13,7 @@ type WebApp = {
   ready: () => void;
   expand: () => void;
   setHeaderColor?: (color: string) => void;
+  disableVerticalSwipes?: () => void;
   setBackgroundColor?: (color: string) => void;
   HapticFeedback?: {
     impactOccurred: (style: HapticStyle) => void;
@@ -40,6 +41,10 @@ export function initTelegram(): void {
 
   app.ready();
   app.expand();
+
+  // Без этого вертикальный свайп по шторке тянет само окно Telegram: список
+  // уезжает вместе с содержимым, и прокрутка внутри становится невозможной.
+  app.disableVerticalSwipes?.();
   app.setHeaderColor?.("#2A1B57");
   app.setBackgroundColor?.("#2A1B57");
 }
