@@ -48,9 +48,19 @@ export type State = {
     firstName: string | null;
   };
   today: string;
+  sharedActive: boolean;
   totals: { day: number; month: number };
   categories: Category[];
   recent: Expense[];
+};
+
+export type SharedState = {
+  activeIsShared: boolean;
+  shared: {
+    title: string;
+    link: string;
+    members: { name: string; role: string }[];
+  } | null;
 };
 
 export type Analytics = {
@@ -104,6 +114,18 @@ export const api = {
 
   settings: (patch: Record<string, unknown>) =>
     request<{ ok: true }>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+
+  ledgers: () => request<SharedState>("/ledgers"),
+
+  createLedger: () => request<{ ok: boolean }>("/ledgers", { method: "POST" }),
+
+  setActiveLedger: (shared: boolean) =>
+    request<{ ok: boolean }>("/ledgers/active", {
+      method: "POST",
+      body: JSON.stringify({ shared }),
+    }),
+
+  leaveLedger: () => request<{ ok: boolean }>("/ledgers/leave", { method: "POST" }),
 
   categories: () =>
     request<{ limit: number; categories: { slug: string; title: string; emoji: string; count: number; total: number }[] }>(

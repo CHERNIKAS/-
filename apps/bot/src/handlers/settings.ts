@@ -1,7 +1,7 @@
 import { CURRENCIES, type Currency } from "@costnote/core";
 import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
-import { type AppUser, updateUser } from "@costnote/core/data";
+import { type AppUser, ledgersOf, updateUser } from "@costnote/core/data";
 
 /**
  * Настройки одним сообщением с переключателями.
@@ -23,6 +23,7 @@ export function settingsText(user: AppUser): string {
     `<i>напоминание</i>  ${user.reminderEnabled ? `в ${String(user.reminderHour).padStart(2, "0")}:00` : "выключено"}`,
     `<i>уборка чата</i>  ${on(user.dailyCleanup)}`,
     `<i>разбор месяца</i>  ${on(user.monthlyDigest)}`,
+    `<i>пишу в</i>  ${user.activeLedgerId === null ? "личные траты" : "общий бюджет"}`,
   ];
 
   if (user.dailyCleanup) {
@@ -47,7 +48,12 @@ export function settingsKeyboard(user: AppUser): InlineKeyboard {
     .row()
     .text(user.dailyCleanup ? "Уборка чата: вкл" : "Уборка чата: выкл", `${SETTINGS_PREFIX}clean`)
     .row()
-    .text(user.monthlyDigest ? "Разбор месяца: вкл" : "Разбор месяца: выкл", `${SETTINGS_PREFIX}digest`);
+    .text(user.monthlyDigest ? "Разбор месяца: вкл" : "Разбор месяца: выкл", `${SETTINGS_PREFIX}digest`)
+    .row()
+    .text(
+      user.activeLedgerId === null ? "Пишу в личные" : "Пишу в общий бюджет",
+      `${SETTINGS_PREFIX}ledger`,
+    );
 }
 
 export async function handleSettingsCallback(ctx: Context, user: AppUser): Promise<boolean> {
@@ -85,6 +91,22 @@ export async function handleSettingsCallback(ctx: Context, user: AppUser): Promi
     case "digest":
       patch.monthlyDigest = !user.monthlyDigest;
       break;
+
+    case "ledger": {
+      // Переключатель, а не выбор из списка: книг всего две — личная и общая.
+      if (user.activeLedgerId !== null) {
+        patch.activeLedgerId = null;
+        break;
+      }
+
+      const shared = (await ledgersOf(user.id)).find((l) => l.isShared);
+      if (shared === undefined) {
+        await ctx.answerCallbackQuery("Общего бюджета нет — заведи его командой /invite");
+        return true;
+      }
+      patch.activeLedgerId = shared.id;
+      break;
+    }
 
     default:
       await ctx.answerCallbackQuery();

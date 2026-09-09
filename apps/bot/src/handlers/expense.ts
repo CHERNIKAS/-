@@ -10,6 +10,7 @@ import {
   listCategories,
   totalSince,
 } from "@costnote/core/data";
+import { membersOf } from "@costnote/core/data";
 import { refreshPanel } from "../panel.js";
 import { rateToUsd, today } from "@costnote/core/data";
 import { recentCorrections, userRules } from "@costnote/core/data";
@@ -140,6 +141,35 @@ export async function handleExpenseMessage(
 
   // Панель показывает итог дня, а он только что изменился.
   await refreshPanel(ctx.api, user, ledgerId, chatId).catch(() => undefined);
+
+  await notifyPartners(ctx, user, ledgerId, parsed.length).catch(() => undefined);
+}
+
+/**
+ * Уведомление остальным участникам общей книги.
+ *
+ * Одно сообщение на всё внесённое разом: человек, записавший подряд три
+ * покупки, не должен превращаться в три уведомления у партнёра.
+ */
+async function notifyPartners(
+  ctx: Context,
+  user: AppUser,
+  ledgerId: number,
+  count: number,
+): Promise<void> {
+  const members = await membersOf(ledgerId);
+  if (members.length < 2) return;
+
+  const name = user.firstName ?? user.username ?? "партнёр";
+  const text =
+    count === 1
+      ? `${name} записал трату в общий бюджет`
+      : `${name} записал ${count} трат в общий бюджет`;
+
+  for (const member of members) {
+    if (member.userId === user.id) continue;
+    await ctx.api.sendMessage(member.tgId, text).catch(() => undefined);
+  }
 }
 
 /**

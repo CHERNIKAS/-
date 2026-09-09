@@ -1,6 +1,7 @@
 import { CATEGORY_SEED } from "../index.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, schema } from "./db.js";
+import { activeLedgerId } from "./ledgers.js";
 import { env } from "./defaults.js";
 
 export type AppUser = typeof schema.users.$inferSelect;
@@ -19,7 +20,8 @@ export async function ensureUser(tg: {
 
   const existing = await db.query.users.findFirst({ where: eq(schema.users.tgId, tgId) });
   if (existing) {
-    return { user: existing, ledgerId: await personalLedgerId(existing.id) };
+    // Активная книга, а не всегда личная: человек мог переключиться на общую.
+    return { user: existing, ledgerId: await activeLedgerId(existing) };
   }
 
   return db.transaction(async (tx) => {
@@ -61,14 +63,6 @@ export async function ensureUser(tg: {
 
     return { user, ledgerId: ledger.id };
   });
-}
-
-async function personalLedgerId(userId: number): Promise<number> {
-  const ledger = await db.query.ledgers.findFirst({
-    where: and(eq(schema.ledgers.ownerId, userId), eq(schema.ledgers.isShared, false)),
-  });
-  if (!ledger) throw new Error("у пользователя нет личной книги трат");
-  return ledger.id;
 }
 
 export async function updateUser(userId: number, patch: Partial<AppUser>): Promise<void> {

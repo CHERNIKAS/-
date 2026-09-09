@@ -13,7 +13,18 @@ import { createCategoryFromSuggestion } from "@costnote/core/data";
 import { startScheduler } from "./scheduler.js";
 import { listCategories, totalSince } from "@costnote/core/data";
 import { rateToUsd, refreshRates, today } from "@costnote/core/data";
-import { ensureUser } from "@costnote/core/data";
+import {
+  createSharedLedger,
+  ensureUser,
+  joinLedger,
+  ledgerByToken,
+  ledgersOf,
+  membersOf,
+  updateUser,
+} from "@costnote/core/data";
+
+/** Перенос строки отдельной константой — экранирование в шаблонах легко теряется. */
+const NL = String.fromCharCode(10);
 
 const bot = new Bot(env.BOT_TOKEN);
 
@@ -24,6 +35,34 @@ bot.catch((err) => {
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
+
+  // Ссылка-приглашение приходит как /start join_<токен>: это штатный способ
+  // Telegram передать данные при первом входе.
+  const payload = ctx.match;
+  if (typeof payload === "string" && payload.startsWith("join_")) {
+    const ledger = await ledgerByToken(payload.slice(5));
+
+    if (ledger) {
+      await joinLedger(ledger.id, user.id);
+      await updateUser(user.id, { activeLedgerId: ledger.id });
+      const members = await membersOf(ledger.id);
+
+      await ctx.reply(
+        [
+          `Ты в общей книге «${ledger.title}».`,
+          "",
+          `Участников: ${members.length}. Траты теперь пишутся сюда.`,
+          "",
+          "<i>Переключить обратно на личные — в настройках.</i>",
+        ].join(NL),
+        { parse_mode: "HTML", reply_markup: mainKeyboard },
+      );
+      return;
+    }
+
+    await ctx.reply("Ссылка не подошла — попроси новую.");
+    return;
+  }
 
   await ctx.reply(
     [
@@ -54,6 +93,32 @@ bot.command("start", async (ctx) => {
       })
       .catch(() => undefined);
   }
+});
+
+bot.command("invite", async (ctx) => {
+  if (!ctx.from) return;
+  const { user } = await ensureUser(ctx.from);
+
+  const shared = (await ledgersOf(user.id)).find((l) => l.isShared);
+  const ledger = shared ?? (await createSharedLedger(user));
+
+  if (shared === undefined) await updateUser(user.id, { activeLedgerId: ledger.id });
+
+  const link = `https://t.me/${env.BOT_USERNAME}?start=join_${ledger.inviteToken}`;
+  const members = await membersOf(ledger.id);
+
+  await ctx.reply(
+    [
+      `<b>${ledger.title}</b>`,
+      `участников: ${members.length}`,
+      "",
+      "Перешли эту ссылку тому, с кем ведёшь общий бюджет:",
+      link,
+      "",
+      "<i>Траты пишутся в общую книгу, пока не переключишь обратно в настройках.</i>",
+    ].join(NL),
+    { parse_mode: "HTML", link_preview_options: { is_disabled: true } },
+  );
 });
 
 bot.command("help", async (ctx) => {
@@ -192,6 +257,7 @@ async function main() {
     { command: "day", description: "Сколько сегодня" },
     { command: "month", description: "Сколько за месяц" },
     { command: "help", description: "Как писать траты" },
+    { command: "invite", description: "Общий бюджет" },
     { command: "settings", description: "Настройки" },
   ]);
 

@@ -18,8 +18,13 @@ import {
   categoryBySlug,
   createExpense,
   db,
+  activeLedgerId,
+  createSharedLedger,
   ensureUser,
   expenseById,
+  leaveLedger,
+  ledgersOf,
+  membersOf,
   learnRule,
   listCategories,
   rateToUsd,
@@ -42,6 +47,7 @@ import { verifyInitData } from "./auth.js";
 
 const BOT_TOKEN = process.env["BOT_TOKEN"] ?? "";
 const PORT = Number(process.env["PORT"] ?? 3000);
+const BOT_USERNAME = process.env["BOT_USERNAME"] ?? "costnote_bot";
 
 const app = Fastify({ logger: { level: process.env["LOG_LEVEL"] ?? "info" } });
 await app.register(cors, { origin: true });
@@ -115,6 +121,7 @@ app.get("/api/state", async (request) => {
       firstName: user.firstName,
     },
     today: todayDay,
+    sharedActive: user.activeLedgerId !== null,
     totals: { day: dayUsd / rate, month: monthUsd / rate },
     categories: categories.map((c) => ({
       slug: c.slug,
@@ -672,5 +679,61 @@ function csv(value: string): string {
   const clean = value.split(";").join(" ").split(String.fromCharCode(10)).join(" ").trim();
   return clean.includes('"') ? `"${clean.replace(/"/g, '""')}"` : clean;
 }
+
+
+/**
+ * Общий бюджет: список книг, участники и ссылка-приглашение.
+ *
+ * Разницы вкладов здесь намеренно нет — она превращает общий бюджет в
+ * взаиморасчёты, а нужен был просто общий котёл.
+ */
+app.get("/api/ledgers", async (request) => {
+  const { user } = request;
+  const all = await ledgersOf(user.id);
+  const shared = all.find((l) => l.isShared) ?? null;
+  const active = await activeLedgerId(user);
+
+  return {
+    activeIsShared: shared !== null && active === shared.id,
+    shared:
+      shared === null
+        ? null
+        : {
+            title: shared.title,
+            link: `https://t.me/${BOT_USERNAME}?start=join_${shared.inviteToken}`,
+            members: (await membersOf(shared.id)).map((m) => ({ name: m.name, role: m.role })),
+          },
+  };
+});
+
+app.post("/api/ledgers", async (request) => {
+  const { user } = request;
+  const existing = (await ledgersOf(user.id)).find((l) => l.isShared);
+  const ledger = existing ?? (await createSharedLedger(user));
+
+  await updateUser(user.id, { activeLedgerId: ledger.id });
+  return { ok: true };
+});
+
+app.post("/api/ledgers/active", async (request) => {
+  const { shared } = z.object({ shared: z.boolean() }).parse(request.body);
+
+  if (!shared) {
+    await updateUser(request.user.id, { activeLedgerId: null });
+    return { ok: true };
+  }
+
+  const target = (await ledgersOf(request.user.id)).find((l) => l.isShared);
+  if (target === undefined) return { ok: false };
+
+  await updateUser(request.user.id, { activeLedgerId: target.id });
+  return { ok: true };
+});
+
+app.post("/api/ledgers/leave", async (request) => {
+  const shared = (await ledgersOf(request.user.id)).find((l) => l.isShared);
+  if (shared !== undefined) await leaveLedger(shared.id, request.user.id);
+  return { ok: true };
+});
 
 await app.listen({ port: PORT, host: "0.0.0.0" });

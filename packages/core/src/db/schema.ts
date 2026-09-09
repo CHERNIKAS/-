@@ -44,6 +44,14 @@ export const users = pgTable(
     lastReminderDay: date("last_reminder_day"),
     /** День последнего предложения по категориям: они приходят раз в неделю. */
     lastSuggestionDay: date("last_suggestion_day"),
+
+    /**
+     * Куда пишутся траты сейчас. Пусто — в личную книгу.
+     *
+     * Переключатель, а не поле у каждой траты: человек обычно ведёт учёт
+     * периодами «сейчас общее», а не решает заново на каждой покупке.
+     */
+    activeLedgerId: integer("active_ledger_id"),
     defaultPayment: paymentEnum("default_payment").notNull().default("card"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

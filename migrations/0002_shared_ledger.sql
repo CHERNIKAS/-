@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "active_ledger_id" integer;

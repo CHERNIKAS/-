@@ -7,6 +7,7 @@ import { Categories } from "./screens/Categories.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
 import { Settings } from "./screens/Settings.js";
+import { Shared } from "./screens/Shared.js";
 import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
 import { notify, tap } from "./telegram.js";
 
@@ -26,7 +27,7 @@ export function App() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
-  const [more, setMore] = useState<"settings" | "categories">("settings");
+  const [more, setMore] = useState<"settings" | "categories" | "shared">("settings");
 
   const reload = useCallback(async () => {
     try {
@@ -89,13 +90,22 @@ export function App() {
             >
               Категории
             </button>
+            <button
+              className={more === "shared" ? "pill on" : "pill ghost"}
+              onClick={() => {
+                tap();
+                setMore("shared");
+              }}
+            >
+              Общий бюджет
+            </button>
           </div>
 
-          {more === "settings" ? (
-            <Settings state={state} onChanged={() => void reload()} />
-          ) : (
+          {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
+          {more === "categories" && (
             <Categories currency={state.user.currency} onChanged={() => void reload()} />
           )}
+          {more === "shared" && <Shared onChanged={() => void reload()} />}
         </>
       )}
 

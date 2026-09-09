@@ -29,7 +29,10 @@ export function Home({
   return (
     <>
       <header className="between" style={{ padding: "10px 2px 20px" }}>
-        <p className="label">{monthTitle(today)}</p>
+        <p className="label">
+          {monthTitle(today)}
+          {state.sharedActive ? " · общий бюджет" : ""}
+        </p>
         <button className="pill" onClick={onCurrency}>
           {user.currency}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
