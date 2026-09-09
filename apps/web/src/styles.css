@@ -194,9 +194,12 @@ svg {
 .grow {
   flex: 1;
   min-width: 0;
+  display: block;
 }
 
 .title {
+  /* Строчные span склеивались бы в одну строку с подписью под ними. */
+  display: block;
   font-size: 15px;
   font-weight: 500;
   white-space: nowrap;
@@ -205,6 +208,7 @@ svg {
 }
 
 .sub {
+  display: block;
   font-size: 12.5px;
   color: var(--ink-3);
   margin-top: 1px;
