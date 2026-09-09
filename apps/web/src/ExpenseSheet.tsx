@@ -42,6 +42,7 @@ export function ExpenseSheet({
   const [picking, setPicking] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const category = categories.find((c) => c.slug === slug) ?? null;
   const color = categoryColor(slug ?? undefined, categories);
@@ -63,8 +64,9 @@ export function ExpenseSheet({
       });
       notify("success");
       onSaved();
-    } catch {
+    } catch (e) {
       notify("error");
+      setError(e instanceof Error ? e.message : "Не получилось сохранить");
     } finally {
       setBusy(false);
     }
@@ -76,8 +78,9 @@ export function ExpenseSheet({
       await api.remove(expense.id);
       notify("success");
       onSaved();
-    } catch {
+    } catch (e) {
       notify("error");
+      setError(e instanceof Error ? e.message : "Не получилось удалить");
     } finally {
       setBusy(false);
     }
@@ -101,6 +104,12 @@ export function ExpenseSheet({
     <div className="sheet" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}>
         <div className="grabber" />
+
+        {error !== null && (
+          <div className="err" style={{ marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
 
         <div className="row" style={{ marginBottom: 18 }}>
           <span

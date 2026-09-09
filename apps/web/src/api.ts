@@ -2,13 +2,15 @@ import { initData } from "./telegram.js";
 
 /** Все запросы подписаны initData: сервер по ней же и опознаёт пользователя. */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // Content-Type ставим только когда тело действительно есть: с этим
+  // заголовком и пустым телом Fastify ждёт JSON и отвечает 400. Из-за этого
+  // молча ломались все запросы без тела — удаление траты в том числе.
+  const headers: Record<string, string> = { "x-init-data": initData() };
+  if (options.body !== undefined) headers["content-type"] = "application/json";
+
   const response = await fetch(`/api${path}`, {
     ...options,
-    headers: {
-      "content-type": "application/json",
-      "x-init-data": initData(),
-      ...(options.headers ?? {}),
-    },
+    headers: { ...headers, ...(options.headers ?? {}) },
   });
 
   if (!response.ok) {
