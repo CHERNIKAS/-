@@ -1,10 +1,12 @@
 import type { Currency } from "@costnote/core";
-import { Bot } from "grammy";
+import { Bot, type CommandContext, type Context } from "grammy";
 import { env } from "./env.js";
 import { moneyShort } from "./format.js";
+import { sendAnalytics, switchPeriod } from "./handlers/analytics.js";
 import { handleCallback } from "./handlers/callbacks.js";
 import { handleExpenseMessage } from "./handlers/expense.js";
 import { mainKeyboard } from "./keyboards.js";
+import { PERIOD_KEYS, type PeriodKey } from "./periods.js";
 import { listCategories, totalSince } from "./repo/expenses.js";
 import { rateToUsd, refreshRates, today } from "./repo/rates.js";
 import { ensureUser } from "./repo/users.js";
@@ -53,7 +55,7 @@ bot.command("help", async (ctx) => {
   );
 });
 
-async function summary(ctx: Parameters<Parameters<typeof bot.command>[1]>[0], fromDay: string, label: string) {
+async function summary(ctx: CommandContext<Context>, fromDay: string, label: string) {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
   const base = user.currency as Currency;
@@ -81,11 +83,28 @@ bot.hears("Категории", async (ctx) => {
   );
 });
 
-bot.hears("Аналитика", (ctx) => ctx.reply("Аналитика будет в следующей версии."));
+bot.hears("Аналитика", async (ctx) => {
+  if (!ctx.from) return;
+  const { user, ledgerId } = await ensureUser(ctx.from);
+  await sendAnalytics(ctx, user, ledgerId);
+});
 
 bot.on("callback_query:data", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
+  const data = ctx.callbackQuery.data;
+
+  if (data.startsWith("a:")) {
+    const key = data.slice(2) as PeriodKey;
+    if (!PERIOD_KEYS.includes(key)) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    await switchPeriod(ctx, user, ledgerId, key);
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
   await handleCallback(ctx, user, ledgerId);
 });
 

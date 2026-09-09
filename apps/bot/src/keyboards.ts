@@ -1,14 +1,19 @@
 import { InlineKeyboard, Keyboard } from "grammy";
 import type { Category } from "./repo/expenses.js";
 
-/** Реплай-клавиатура: быстрые действия. Сворачивается штатной кнопкой Telegram. */
+/**
+ * Реплай-клавиатура: быстрые действия.
+ *
+ * Без persistent — именно этот флаг заставляет Telegram держать клавиатуру
+ * всегда и прячет штатную кнопку сворачивания справа от поля ввода. Без него
+ * кнопка появляется и клавиатуру можно убрать одним нажатием.
+ */
 export const mainKeyboard = new Keyboard()
   .text("Аналитика")
   .text("Категории")
   .row()
   .text("Помощь")
-  .resized()
-  .persistent();
+  .resized();
 
 export const CARD_ACTIONS = {
   edit: (id: number) => `x:edit:${id}`,
