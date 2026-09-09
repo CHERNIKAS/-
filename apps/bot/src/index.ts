@@ -39,6 +39,21 @@ bot.command("start", async (ctx) => {
   );
 
   await refreshPanel(ctx.api, user, ledgerId, String(ctx.chat.id)).catch(() => undefined);
+
+  // Кнопка слева от поля ввода ставится каждому чату отдельно: установка по
+  // умолчанию, один раз на бота, у Telegram применяется ненадёжно.
+  if (env.WEBAPP_URL !== "") {
+    await ctx.api
+      .setChatMenuButton({
+        chat_id: ctx.chat.id,
+        menu_button: {
+          type: "web_app",
+          text: "Кошелёк",
+          web_app: { url: env.WEBAPP_URL },
+        },
+      })
+      .catch(() => undefined);
+  }
 });
 
 bot.command("help", async (ctx) => {
