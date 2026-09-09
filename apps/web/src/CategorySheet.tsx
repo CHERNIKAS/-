@@ -58,10 +58,12 @@ export function CategorySheet({
 
   return (
     <div className="sheet" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={drag.sheetStyle}>
-        <div className="grabber" {...drag.handleProps} style={{ padding: "10px 0", margin: "-10px auto 6px", width: 80, background: "none" }}>
-          <span style={{ display: "block", width: 38, height: 4, borderRadius: 99, background: "rgba(255,255,255,.35)", margin: "0 auto" }} />
-        </div>
+      <div
+        ref={drag.ref}
+        onClick={(e) => e.stopPropagation()}
+        style={drag.sheetStyle}
+      >
+        <div className="grabber" />
 
         <button
           className="pill ghost"
