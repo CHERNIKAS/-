@@ -63,6 +63,17 @@ export type SharedState = {
   } | null;
 };
 
+export type RecurringItem = {
+  id: number;
+  title: string;
+  amount: number;
+  currency: string;
+  dayOfMonth: number;
+  active: boolean;
+  category: string | null;
+  categorySlug: string | null;
+};
+
 export type Analytics = {
   period: { key: string; label: string; from: string; to: string };
   total: number;
@@ -114,6 +125,22 @@ export const api = {
 
   settings: (patch: Record<string, unknown>) =>
     request<{ ok: true }>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+
+  recurring: () => request<{ items: RecurringItem[] }>("/recurring"),
+
+  createRecurring: (payload: {
+    title: string;
+    amount: number;
+    currency: string;
+    dayOfMonth: number;
+    categorySlug?: string;
+  }) => request<{ id: number }>("/recurring", { method: "POST", body: JSON.stringify(payload) }),
+
+  toggleRecurring: (id: number, active: boolean) =>
+    request<{ ok: true }>(`/recurring/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active }),
+    }),
 
   ledgers: () => request<SharedState>("/ledgers"),
 

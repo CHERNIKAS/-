@@ -45,6 +45,9 @@ export const users = pgTable(
     /** День последнего предложения по категориям: они приходят раз в неделю. */
     lastSuggestionDay: date("last_suggestion_day"),
 
+    /** День последнего недельного итога — чтобы не прислать его дважды. */
+    lastWeeklyDay: date("last_weekly_day"),
+
     /**
      * Куда пишутся траты сейчас. Пусто — в личную книгу.
      *
@@ -237,4 +240,38 @@ export const rates = pgTable(
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.day, t.currency] })],
+);
+
+/**
+ * Регулярные платежи: подписки, аренда, счета.
+ *
+ * Заводятся один раз и начисляются сами. Смысл именно в этом: такие траты
+ * человек помнит хуже всего — они не сопровождаются походом в магазин, и
+ * именно они тихо съедают бюджет.
+ */
+export const recurring = pgTable(
+  "recurring",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    ledgerId: integer("ledger_id")
+      .notNull()
+      .references(() => ledgers.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    categoryId: integer("category_id").references(() => categories.id),
+
+    title: varchar({ length: 128 }).notNull(),
+    amount: numeric({ precision: 14, scale: 2 }).notNull(),
+    currency: currencyEnum().notNull(),
+
+    /** День месяца, 1–28: 29–31 есть не в каждом месяце. */
+    dayOfMonth: smallint("day_of_month").notNull(),
+    active: boolean().notNull().default(true),
+    /** Первое число месяца, за который платёж уже начислен. */
+    chargedMonth: date("charged_month"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("recurring_ledger_idx").on(t.ledgerId, t.active)],
 );

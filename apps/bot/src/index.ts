@@ -5,7 +5,7 @@ import { moneyShort } from "./format.js";
 import { sendAnalytics, switchPeriod } from "./handlers/analytics.js";
 import { handleSettingsCallback, settingsKeyboard, settingsText } from "./handlers/settings.js";
 import { handleCallback } from "./handlers/callbacks.js";
-import { handleExpenseMessage } from "./handlers/expense.js";
+import { handleEditedMessage, handleExpenseMessage } from "./handlers/expense.js";
 import { mainKeyboard } from "./keyboards.js";
 import { refreshPanel } from "./panel.js";
 import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
@@ -250,6 +250,18 @@ bot.on("message:text", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
   await handleExpenseMessage(ctx, user, ledgerId, ctx.msg.text);
+});
+
+/**
+ * Правка своего сообщения перезапускает разбор.
+ *
+ * Человек исправляет опечатку в сумме там же, где её сделал, и ждёт, что
+ * трата обновится — а не что появится вторая.
+ */
+bot.on("edited_message:text", async (ctx) => {
+  if (!ctx.from) return;
+  const { user, ledgerId } = await ensureUser(ctx.from);
+  await handleEditedMessage(ctx, user, ledgerId, ctx.editedMessage.text);
 });
 
 async function main() {

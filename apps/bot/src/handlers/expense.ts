@@ -1,4 +1,5 @@
 import { categorize, classify, type Currency, parseMessage } from "@costnote/core";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
 import { env } from "../env.js";
@@ -8,6 +9,7 @@ import {
   categoryBySlug,
   createExpense,
   listCategories,
+  softDelete,
   totalSince,
 } from "@costnote/core/data";
 import { membersOf } from "@costnote/core/data";
@@ -60,6 +62,24 @@ export async function handleExpenseMessage(
   }
 
   await deleteUserMessage(ctx);
+  await saveExpenses(ctx, user, ledgerId, chatId, text);
+}
+
+/**
+ * Сохранение трат из строки.
+ *
+ * Вынесено отдельно, потому что тем же путём идёт повторный разбор после
+ * правки сообщения — иначе логика начисления разъехалась бы на две копии.
+ */
+export async function saveExpenses(
+  ctx: Context,
+  user: AppUser,
+  ledgerId: number,
+  chatId: string,
+  text: string,
+): Promise<void> {
+  const parsed = parseMessage(text).filter((e) => e.ok);
+  if (parsed.length === 0) return;
 
   const categories = await listCategories(ledgerId);
   const options = categories.map((c) => ({ slug: c.slug, title: c.title, hint: c.hint }));
@@ -192,4 +212,58 @@ export function shiftDay(day: string, daysAgo: number): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - daysAgo);
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Повторный разбор после правки сообщения.
+ *
+ * Старые траты этого сообщения удаляются мягко, карточки убираются, и всё
+ * записывается заново. Проще и честнее, чем угадывать, какую именно строку
+ * человек поправил в сообщении из трёх трат.
+ */
+export async function handleEditedMessage(
+  ctx: Context,
+  user: AppUser,
+  ledgerId: number,
+  text: string,
+): Promise<void> {
+  const chatId = String(ctx.chat?.id ?? "");
+  const messageId = ctx.editedMessage?.message_id;
+  if (messageId === undefined) return;
+
+  const original = await db.query.rawInputs.findFirst({
+    where: and(eq(schema.rawInputs.chatId, chatId), eq(schema.rawInputs.tgMessageId, messageId)),
+  });
+
+  // Сообщение, которого бот не видел, правкой не становится тратой.
+  if (!original) return;
+
+  const cards = await db.query.botMessages.findMany({
+    where: and(
+      eq(schema.botMessages.userId, user.id),
+      eq(schema.botMessages.kind, "card"),
+      isNull(schema.botMessages.cleanedAt),
+    ),
+    orderBy: desc(schema.botMessages.createdAt),
+    limit: 20,
+  });
+
+  for (const card of cards) {
+    if (card.expenseId === null) continue;
+    if (card.createdAt < original.receivedAt) continue;
+
+    await softDelete(card.expenseId);
+    await ctx.api.deleteMessage(card.chatId, card.messageId).catch(() => undefined);
+    await db
+      .update(schema.botMessages)
+      .set({ cleanedAt: new Date() })
+      .where(eq(schema.botMessages.id, card.id));
+  }
+
+  await db
+    .update(schema.rawInputs)
+    .set({ text })
+    .where(eq(schema.rawInputs.id, original.id));
+
+  await saveExpenses(ctx, user, ledgerId, chatId, text);
 }

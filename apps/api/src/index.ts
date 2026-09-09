@@ -19,11 +19,14 @@ import {
   createExpense,
   db,
   activeLedgerId,
+  createRecurring,
   createSharedLedger,
+  deleteRecurring,
   ensureUser,
   expenseById,
   leaveLedger,
   ledgersOf,
+  listRecurring,
   membersOf,
   learnRule,
   listCategories,
@@ -31,6 +34,7 @@ import {
   recentCorrections,
   schema,
   setCategory,
+  setRecurringActive,
   softDelete,
   today,
   totalSince,
@@ -733,6 +737,69 @@ app.post("/api/ledgers/active", async (request) => {
 app.post("/api/ledgers/leave", async (request) => {
   const shared = (await ledgersOf(request.user.id)).find((l) => l.isShared);
   if (shared !== undefined) await leaveLedger(shared.id, request.user.id);
+  return { ok: true };
+});
+
+
+/** Регулярные платежи: подписки, аренда, счета. */
+app.get("/api/recurring", async (request) => {
+  const rows = await listRecurring(request.ledgerId);
+  const categories = await listCategories(request.ledgerId);
+
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      amount: Number(r.amount),
+      currency: r.currency,
+      dayOfMonth: r.dayOfMonth,
+      active: r.active,
+      category: categories.find((c) => c.id === r.categoryId)?.title ?? null,
+      categorySlug: categories.find((c) => c.id === r.categoryId)?.slug ?? null,
+    })),
+  };
+});
+
+app.post("/api/recurring", async (request) => {
+  const body = z
+    .object({
+      title: z.string().min(1).max(128),
+      amount: z.number().positive(),
+      currency: z.enum(CURRENCIES),
+      dayOfMonth: z.number().int().min(1).max(28),
+      categorySlug: z.string().optional(),
+    })
+    .parse(request.body);
+
+  const category =
+    body.categorySlug === undefined
+      ? undefined
+      : await categoryBySlug(request.ledgerId, body.categorySlug);
+
+  const created = await createRecurring({
+    ledgerId: request.ledgerId,
+    userId: request.user.id,
+    categoryId: category?.id ?? null,
+    title: body.title,
+    amount: body.amount,
+    currency: body.currency,
+    dayOfMonth: body.dayOfMonth,
+  });
+
+  return { id: created.id };
+});
+
+app.patch("/api/recurring/:id", async (request) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+  const { active } = z.object({ active: z.boolean() }).parse(request.body);
+
+  await setRecurringActive(id, active);
+  return { ok: true };
+});
+
+app.delete("/api/recurring/:id", async (request) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+  await deleteRecurring(id);
   return { ok: true };
 });
 
