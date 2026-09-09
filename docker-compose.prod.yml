@@ -59,7 +59,11 @@ services:
       DEFAULT_CURRENCY: ${DEFAULT_CURRENCY}
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE}
       DEFAULT_REMINDER_HOUR: ${DEFAULT_REMINDER_HOUR}
-    networks: [internal]
+    # Уникальное имя в сети: короткое "api" на этой машине уже занято чужим
+    # контейнером в общей сети coolify, и Docker DNS уводил запросы туда.
+    networks:
+      internal:
+        aliases: [costnote-api]
 
   # Приложение: статика Mini App плюс проксирование /api в соседний контейнер.
   web:
