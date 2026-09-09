@@ -1,4 +1,4 @@
-import { type Currency, findRule } from "@costnote/core";
+import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule } from "@costnote/core";
 import { applyMapping, detectMapping, readStatement } from "@costnote/core/import";
 import {
   type AppUser,
@@ -167,13 +167,49 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   const fallback = categories.find((c) => c.slug === "other");
   const base = user.currency as Currency;
 
+  await ctx.answerCallbackQuery("Разбираю…");
+
+  // Сначала правила — они бесплатны и точны. Всё, чего они не знают, уходит
+  // в модель одной пачкой уникальных названий: в выписке одни и те же места
+  // повторяются десятками строк, и спрашивать про каждую строку значило бы
+  // растянуть импорт на часы.
+  const unknown = new Set<string>();
+  for (const row of rows) {
+    const clean = cleanMerchant(row.description);
+    if (findRule(clean, rules) === null) unknown.add(clean);
+  }
+
+  let guessed = new Map<string, string>();
+  let modelFailed = false;
+
+  if (unknown.size > 0) {
+    try {
+      guessed = await classifyBatch(
+        [...unknown],
+        categories.map((c) => ({ slug: c.slug, title: c.title, hint: c.hint })),
+        { apiKey: env.GEMINI_API_KEY, model: env.AI_MODEL },
+      );
+    } catch (error) {
+      // Модель недоступна — траты всё равно сохраним, категории добьёт воркер.
+      modelFailed = error instanceof ClassifyError;
+    }
+  }
+
   let created = 0;
 
   for (const row of rows) {
     const currency = (row.currency ?? base) as Currency;
     const rate = await rateToUsd(currency, row.spentAt);
-    const rule = findRule(row.description, rules);
-    const category = rule === null ? fallback : categories.find((c) => c.id === rule.categoryId);
+    const clean = cleanMerchant(row.description);
+    const rule = findRule(clean, rules);
+
+    const guessedSlug = rule === null ? guessed.get(clean) : undefined;
+    const category =
+      rule !== null
+        ? categories.find((c) => c.id === rule.categoryId)
+        : guessedSlug === undefined
+          ? fallback
+          : categories.find((c) => c.slug === guessedSlug);
 
     await db.insert(schema.expenses).values({
       ledgerId: record.ledgerId,
@@ -186,7 +222,8 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
       merchant: row.description.slice(0, 128),
       source: "app",
       confidence: null,
-      needsReview: rule === null,
+      // На доразбор уходит только то, чего не знают ни правила, ни модель.
+      needsReview: rule === null && guessedSlug === undefined,
       importId: record.id,
       fingerprint: row.fingerprint,
     });
@@ -196,18 +233,26 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
 
   await markImportApplied(record.id, created);
 
+  const pending = rows.filter(
+    (r) => findRule(cleanMerchant(r.description), rules) === null && !guessed.has(cleanMerchant(r.description)),
+  ).length;
+
   await ctx.editMessageText(
     [
       `<b>Импортировано ${created}</b>`,
       "",
-      "<i>Категории проставлю по мере разбора — это займёт несколько минут.</i>",
+      pending === 0
+        ? "<i>Категории расставлены</i>"
+        : modelFailed
+          ? `<i>${pending} трат без категории: модель недоступна, вернусь к ним позже</i>`
+          : `<i>${pending} трат ушло в «Прочее» — поправишь, и я запомню</i>`,
     ].join(NL),
     {
       parse_mode: "HTML",
       reply_markup: new InlineKeyboard().text("Отменить импорт", `i:undo:${record.id}`),
     },
   );
-  await ctx.answerCallbackQuery(`Добавлено ${created}`);
+
 }
 
 export async function cancelImportFlow(ctx: Context, importId: number): Promise<void> {
