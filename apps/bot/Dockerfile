@@ -6,7 +6,7 @@ RUN apk add --no-cache font-noto ttf-dejavu && corepack enable
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/bot/package.json apps/bot/
 
