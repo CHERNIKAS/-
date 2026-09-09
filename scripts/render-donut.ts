@@ -15,6 +15,10 @@ const svg = donutSvg(
   { total: "$842", caption: "30 дней", legendRows: data.length },
 );
 
-const png = new Resvg(svg, { fitTo: { mode: "width", value: 520 } }).render().asPng();
+const png = new Resvg(svg, {
+  fitTo: { mode: "width", value: 1040 },
+  background: "#2A1B57",
+  font: { loadSystemFonts: true, defaultFontFamily: "Noto Sans" },
+}).render().asPng();
 writeFileSync(process.argv[2] ?? "donut.png", png);
 console.log(`готово, ${(png.length / 1024).toFixed(1)} КБ`);

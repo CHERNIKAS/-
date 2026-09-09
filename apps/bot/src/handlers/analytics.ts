@@ -56,8 +56,11 @@ async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<
     legendRows: Math.min(segments.length, 6),
   });
 
+  // Рендерим с запасом по плотности: Telegram показывает картинку во всю
+  // ширину пузыря и на плотных экранах растягивает её, а не ужимает.
   const png = new Resvg(svg, {
-    fitTo: { mode: "width", value: 520 },
+    fitTo: { mode: "width", value: 1040 },
+    background: "#2A1B57",
     font: { loadSystemFonts: true, defaultFontFamily: "Noto Sans" },
   })
     .render()

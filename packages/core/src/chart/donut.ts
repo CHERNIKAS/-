@@ -52,7 +52,7 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
   const legendRows = Math.min(options.legendRows ?? visible.length, visible.length, 8);
   const legendTop = CY + RADIUS + 16;
   const height = legendRows > 0 ? legendTop + legendRows * LEGEND_STEP : CY + RADIUS + 10;
-  const size = options.size ?? 520;
+  const size = options.size ?? 1040;
 
   const total = visible.reduce((sum, s) => sum + s.value, 0);
   const arcs: string[] = [];
@@ -95,7 +95,7 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     `.cp{fill:#b9aee0;font-family:${FONT};font-size:5px}`,
     `.lg{fill:#e7e2f7;font-family:${FONT};font-size:6px}`,
     "</style>",
-    `<rect class="bg" x="0" y="0" width="100" height="${h}"/>`,
+    `<rect class="bg" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
     `<circle cx="${CX}" cy="${CY}" r="${RADIUS}" fill="none" stroke="#ffffff22" stroke-width="${STROKE}"/>`,
     ...arcs,
     `<text x="${CX}" y="${CY + 2}" text-anchor="middle" class="tt">${escapeXml(options.total)}</text>`,
