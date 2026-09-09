@@ -340,13 +340,27 @@ app.delete("/api/expenses/:id", async (request, reply) => {
 });
 
 app.get("/api/analytics", async (request) => {
-  const { period: key } = z
-    .object({ period: z.enum(PERIOD_KEYS).default("d30") })
+  const query = z
+    .object({
+      period: z.string().default("d30"),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    })
     .parse(request.query);
 
   const { user, ledgerId } = request;
   const todayDay = today();
-  const period = buildPeriod(key as PeriodKey, todayDay);
+
+  // Произвольный диапазон приходит датами; пресеты считаются по ключу.
+  const period =
+    query.from !== undefined && query.to !== undefined
+      ? { from: query.from, to: query.to, label: `${query.from} — ${query.to}` }
+      : buildPeriod(
+          (PERIOD_KEYS.includes(query.period as PeriodKey) ? query.period : "d30") as PeriodKey,
+          todayDay,
+        );
+
+  const key = query.period;
   const rate = await baseRate(user, todayDay);
 
   const [categories, currencies, total] = await Promise.all([

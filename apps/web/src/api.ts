@@ -84,7 +84,12 @@ export const api = {
 
   remove: (id: number) => request<{ ok: true }>(`/expenses/${id}`, { method: "DELETE" }),
 
-  analytics: (period: string) => request<Analytics>(`/analytics?period=${period}`),
+  analytics: (period: string, from?: string, to?: string) =>
+    request<Analytics>(
+      period === "custom" && from !== undefined && to !== undefined
+        ? `/analytics?period=custom&from=${from}&to=${to}`
+        : `/analytics?period=${period}`,
+    ),
 
   settings: (patch: Record<string, unknown>) =>
     request<{ ok: true }>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),

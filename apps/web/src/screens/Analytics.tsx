@@ -1,10 +1,11 @@
-import { PALETTE, PERIOD_KEYS, PERIOD_TITLE, donutSvg, type PeriodKey } from "@costnote/core";
+import { PALETTE, donutSvg } from "@costnote/core";
 import { useEffect, useState } from "react";
 import { type Analytics as Data, api } from "../api.js";
 import { money, moneyExact } from "../format.js";
 import { CategoryIcon } from "../icons.js";
 import { tint } from "../palette.js";
-import { tap } from "../telegram.js";
+import { PeriodPicker } from "../PeriodPicker.js";
+import { type Range, rangeFor, rangeTitle } from "../periods.js";
 
 /**
  * Разбор трат.
@@ -13,8 +14,8 @@ import { tap } from "../telegram.js";
  * и без легенды: подложка дала бы коробку внутри коробки, а легенду заменяет
  * список под кольцом — там и суммы, и доли.
  */
-export function Analytics({ currency }: { currency: string }) {
-  const [period, setPeriod] = useState<PeriodKey>("d30");
+export function Analytics({ currency, today }: { currency: string; today: string }) {
+  const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +24,7 @@ export function Analytics({ currency }: { currency: string }) {
     setError(null);
 
     api
-      .analytics(period)
+      .analytics(range.key, range.from, range.to)
       .then((result) => {
         if (alive) setData(result);
       })
@@ -34,26 +35,15 @@ export function Analytics({ currency }: { currency: string }) {
     return () => {
       alive = false;
     };
-  }, [period]);
+  }, [range]);
 
   const categories = data?.categories ?? [];
   const total = data?.total ?? 0;
 
   return (
     <>
-      <div className="chips" style={{ padding: "10px 0 22px" }}>
-        {PERIOD_KEYS.map((key) => (
-          <button
-            key={key}
-            className={key === period ? "pill on" : "pill ghost"}
-            onClick={() => {
-              tap();
-              setPeriod(key);
-            }}
-          >
-            {PERIOD_TITLE[key]}
-          </button>
-        ))}
+      <div style={{ padding: "12px 0 22px" }}>
+        <PeriodPicker today={today} range={range} onChange={setRange} />
       </div>
 
       {error !== null && <div className="err">{error}</div>}
@@ -78,7 +68,7 @@ export function Analytics({ currency }: { currency: string }) {
                 })),
                 {
                   total: money(total, data.currency),
-                  caption: data.period.label,
+                  caption: rangeTitle(range),
                   legendRows: 0,
                   background: "none",
                   size: 300,

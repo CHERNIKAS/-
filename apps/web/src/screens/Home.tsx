@@ -10,7 +10,15 @@ import { categoryColor, tint } from "../palette.js";
  * и показывает свежие траты. Разбивка по категориям живёт в разборе: она нужна
  * раз в месяц, а лента нужна каждый день.
  */
-export function Home({ state, onExpense }: { state: State; onExpense: (id: number) => void }) {
+export function Home({
+  state,
+  onExpense,
+  onCurrency,
+}: {
+  state: State;
+  onExpense: (id: number) => void;
+  onCurrency: () => void;
+}) {
   const { user, totals, recent, today } = state;
   const budget = user.monthlyBudget;
   const left = budget === null ? null : budget - totals.month;
@@ -22,7 +30,12 @@ export function Home({ state, onExpense }: { state: State; onExpense: (id: numbe
     <>
       <header className="between" style={{ padding: "10px 2px 20px" }}>
         <p className="label">{monthTitle(today)}</p>
-        <span className="pill">{user.currency}</span>
+        <button className="pill" onClick={onCurrency}>
+          {user.currency}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
       </header>
 
       <p className="label" style={{ marginBottom: 8 }}>

@@ -11,12 +11,20 @@ import { notify, tap } from "./telegram.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
 
+const CURRENCIES = [
+  { code: "USD", symbol: "$", title: "Доллар" },
+  { code: "EUR", symbol: "€", title: "Евро" },
+  { code: "UAH", symbol: "₴", title: "Гривна" },
+  { code: "TRY", symbol: "₺", title: "Лира" },
+] as const;
+
 export function App() {
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
+  const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -48,8 +56,10 @@ export function App() {
 
   return (
     <>
-      {tab === "home" && <Home state={state} onExpense={setEditing} />}
-      {tab === "stats" && <Analytics currency={state.user.currency} />}
+      {tab === "home" && (
+        <Home state={state} onExpense={setEditing} onCurrency={() => setPickingCurrency(true)} />
+      )}
+      {tab === "stats" && <Analytics currency={state.user.currency} today={state.today} />}
       {tab === "history" && (
         <History
           categories={state.categories}
@@ -109,6 +119,43 @@ export function App() {
           </button>
         ))}
       </nav>
+
+      {pickingCurrency && (
+        <div className="sheet" onClick={() => setPickingCurrency(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <div className="grabber" />
+            <p className="label" style={{ marginBottom: 6 }}>
+              Показывать всё в
+            </p>
+            <p className="dim" style={{ marginBottom: 16 }}>
+              Меняется только показ. Трата навсегда остаётся в той валюте, в которой была.
+            </p>
+
+            <div className="card rows" style={{ padding: "2px 16px", marginBottom: 16 }}>
+              {CURRENCIES.map((c) => (
+                <button
+                  key={c.code}
+                  className="item"
+                  onClick={() => {
+                    tap();
+                    void api
+                      .settings({ currency: c.code })
+                      .then(() => {
+                        setPickingCurrency(false);
+                        return reload();
+                      })
+                      .catch(() => notify("error"));
+                  }}
+                >
+                  <span className="tile">{c.symbol}</span>
+                  <span className="grow title">{c.title}</span>
+                  {c.code === state.user.currency && <span className="pill on">выбрано</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {adding && (
         <Add

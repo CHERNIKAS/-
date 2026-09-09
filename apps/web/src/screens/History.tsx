@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Expense } from "../api.js";
-import { dayTitle, money, moneyExact, shiftDay } from "../format.js";
+import { dayTitle, money, moneyExact } from "../format.js";
+import { PeriodPicker } from "../PeriodPicker.js";
+import { type Range, rangeFor, rangeTitle } from "../periods.js";
 import { CategoryIcon, IconSearch } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 
@@ -23,7 +25,7 @@ export function History({
 }) {
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [query, setQuery] = useState("");
-  const [days, setDays] = useState(30);
+  const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export function History({
     setError(null);
 
     api
-      .expenses(shiftDay(today, days), today)
+      .expenses(range.from, range.to)
       .then((result) => {
         if (alive) setExpenses(result.expenses);
       })
@@ -42,7 +44,7 @@ export function History({
     return () => {
       alive = false;
     };
-  }, [today, days]);
+  }, [range]);
 
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -82,18 +84,10 @@ export function History({
         />
       </div>
 
-      <div className="between" style={{ marginBottom: 14 }}>
-        <div className="chips">
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              className={d === days ? "pill on" : "pill ghost"}
-              onClick={() => setDays(d)}
-            >
-              {d} дней
-            </button>
-          ))}
-        </div>
+      <PeriodPicker today={today} range={range} onChange={setRange} />
+
+      <div className="between" style={{ margin: "16px 2px 16px" }}>
+        <span className="label">{rangeTitle(range)}</span>
         <span className="num muted">{money(total, currency)}</span>
       </div>
 
