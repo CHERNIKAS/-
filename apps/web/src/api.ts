@@ -64,10 +64,10 @@ export const api = {
   expenses: (from: string, to: string) =>
     request<{ expenses: Expense[] }>(`/expenses?from=${from}&to=${to}`),
 
-  createFromText: (text: string) =>
+  createFromText: (text: string, currency?: string) =>
     request<{ created: Expense[] }>("/expenses", {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, currency }),
     }),
 
   create: (payload: { amount: number; currency?: string; categorySlug?: string; merchant?: string }) =>
@@ -90,6 +90,12 @@ export const api = {
         ? `/analytics?period=custom&from=${from}&to=${to}`
         : `/analytics?period=${period}`,
     ),
+
+  exportCsv: (from?: string, to?: string) =>
+    request<{ ok: true; count: number }>("/export", {
+      method: "POST",
+      body: JSON.stringify({ from, to }),
+    }),
 
   settings: (patch: Record<string, unknown>) =>
     request<{ ok: true }>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),

@@ -204,7 +204,8 @@ app.post("/api/expenses", async (request, reply) => {
             raw: e.raw,
             merchant: e.merchant,
             amount: e.amount ?? 0,
-            currency: (e.currency ?? user.currency) as Currency,
+            // Валюта из строки главнее выбранной в приложении: её написали явно.
+            currency: (e.currency ?? body.currency ?? user.currency) as Currency,
             spentAt: shiftDay(todayDay, e.daysAgo),
           }))
       : body.amount !== undefined
@@ -427,5 +428,83 @@ app.post("/api/categories", async (request) => {
 
   return { category: created ? { slug: created.slug, title: created.title, emoji: created.emoji } : null };
 });
+
+
+/**
+ * Выгрузка в CSV.
+ *
+ * Файл уходит в Telegram сообщением от бота: скачать что-либо прямо из
+ * мини-аппа нельзя — её webview блокирует загрузки. Заодно файл остаётся в
+ * переписке, и его не нужно искать в папке «Загрузки».
+ */
+app.post("/api/export", async (request, reply) => {
+  const { user, ledgerId } = request;
+  const query = z
+    .object({ from: z.string().optional(), to: z.string().optional() })
+    .parse(request.body ?? {});
+
+  const todayDay = today();
+  const from = query.from ?? `${todayDay.slice(0, 4)}-01-01`;
+  const to = query.to ?? todayDay;
+
+  const categories = await listCategories(ledgerId);
+  const rows = await db.query.expenses.findMany({
+    where: and(
+      eq(schema.expenses.ledgerId, ledgerId),
+      gte(schema.expenses.spentAt, from),
+      lte(schema.expenses.spentAt, to),
+      isNull(schema.expenses.deletedAt),
+    ),
+    orderBy: [schema.expenses.spentAt, schema.expenses.id],
+  });
+
+  const header = ["дата", "сумма", "валюта", "курс к USD", "в USD", "категория", "место", "заметка"];
+  const lines = [header.join(";")];
+
+  for (const row of rows) {
+    const category = categories.find((c) => c.id === row.categoryId);
+    const amount = Number(row.amount);
+    const rate = Number(row.rateToUsd);
+
+    lines.push(
+      [
+        row.spentAt,
+        amount.toFixed(2).replace(".", ","),
+        row.currency,
+        rate.toFixed(6).replace(".", ","),
+        (amount * rate).toFixed(2).replace(".", ","),
+        csv(category?.title ?? ""),
+        csv(row.merchant ?? ""),
+        csv(row.note ?? ""),
+      ].join(";"),
+    );
+  }
+
+  // BOM нужен, чтобы Excel не превратил кириллицу в мусор.
+  const bom = String.fromCharCode(0xfeff);
+  const eol = String.fromCharCode(13) + String.fromCharCode(10);
+  const file = new Blob([bom + lines.join(eol)], { type: "text/csv" });
+  const form = new FormData();
+  form.append("chat_id", user.tgId);
+  form.append("caption", `Траты с ${from} по ${to} — ${rows.length} шт.`);
+  form.append("document", file, `costnote-${from}-${to}.csv`);
+
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!response.ok) {
+    await reply.code(502).send({ error: "не получилось отправить файл" });
+    return;
+  }
+
+  return { ok: true, count: rows.length };
+});
+
+function csv(value: string): string {
+  const clean = value.split(";").join(" ").split(String.fromCharCode(10)).join(" ").trim();
+  return clean.includes('"') ? `"${clean.replace(/"/g, '""')}"` : clean;
+}
 
 await app.listen({ port: PORT, host: "0.0.0.0" });

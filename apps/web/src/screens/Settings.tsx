@@ -7,6 +7,7 @@ const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 /** Короткий список: только то, что действительно переключают. */
 export function Settings({ state, onChanged }: { state: State; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [exported, setExported] = useState<string | null>(null);
   const [budget, setBudget] = useState(
     state.user.monthlyBudget === null ? "" : String(state.user.monthlyBudget),
   );
@@ -26,7 +27,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
 
   return (
     <>
-      <p className="dim" style={{ margin: "0 2px 8px" }}>
+      <p className="label" style={{ margin: "12px 2px 10px" }}>
         Валюта отображения
       </p>
       <div className="chips" style={{ marginBottom: 20 }}>
@@ -44,9 +45,9 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         Меняется только показ. Трата навсегда остаётся в той валюте, в которой была.
       </p>
 
-      <div className="glass list" style={{ padding: "4px 14px" }}>
+      <div className="card rows" style={{ padding: "2px 16px" }}>
         <div className="item">
-          <span style={{ flex: 1 }}>Напоминание вечером</span>
+          <span className="grow">Напоминание вечером</span>
           <button
             className={user.reminderEnabled ? "pill on" : "pill ghost"}
             onClick={() => void patch({ reminderEnabled: !user.reminderEnabled })}
@@ -57,7 +58,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
 
         {user.reminderEnabled && (
           <div className="item">
-            <span style={{ flex: 1 }} className="muted">
+            <span className="grow muted">
               Час напоминания
             </span>
             <button
@@ -76,9 +77,9 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         )}
 
         <div className="item">
-          <span style={{ flex: 1 }}>
+          <span className="grow">
             Уборка чата
-            <span className="dim" style={{ display: "block" }}>
+            <span className="sub">
               раз в сутки удаляет вчерашние карточки
             </span>
           </span>
@@ -91,9 +92,9 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         </div>
 
         <div className="item">
-          <span style={{ flex: 1 }}>
+          <span className="grow">
             Разбор месяца
-            <span className="dim" style={{ display: "block" }}>
+            <span className="sub">
               несколько наблюдений первого числа
             </span>
           </span>
@@ -106,7 +107,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         </div>
       </div>
 
-      <p className="dim" style={{ margin: "20px 2px 8px" }}>
+      <p className="label" style={{ margin: "24px 2px 10px" }}>
         Месячный бюджет
       </p>
       <div className="row">
@@ -129,7 +130,30 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         </button>
       </div>
 
-      <p className="dim" style={{ margin: "20px 2px 0" }}>
+      <p className="label" style={{ margin: "24px 2px 10px" }}>
+        Данные
+      </p>
+
+      <button
+        className="cta"
+        style={{ background: "rgba(255,255,255,.12)", color: "var(--ink)" }}
+        onClick={() => {
+          tap();
+          setExported("Готовлю файл…");
+          void api
+            .exportCsv()
+            .then((r) => setExported(`Отправил в чат: ${r.count} трат`))
+            .catch(() => setExported("Не получилось выгрузить"));
+        }}
+      >
+        Выгрузить в CSV
+      </button>
+
+      <p className="dim" style={{ margin: "10px 2px 0" }}>
+        {exported ?? "Файл придёт сообщением от бота — скачать напрямую из мини-аппа Telegram не даёт."}
+      </p>
+
+      <p className="dim" style={{ margin: "24px 2px 0" }}>
         Часовой пояс: {user.timezone}
       </p>
     </>

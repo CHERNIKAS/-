@@ -13,7 +13,7 @@ import { notify, tap } from "../telegram.js";
  */
 export function Add({
   categories,
-  currency,
+  currency: defaultCurrency,
   onDone,
   onClose,
 }: {
@@ -29,6 +29,8 @@ export function Add({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allCategories, setAllCategories] = useState(false);
+  const [currency, setCurrency] = useState(defaultCurrency);
+  const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const amount = Number(digits.replace(",", ".")) || 0;
   const canSave = mode === "text" ? text.trim() !== "" : amount > 0;
@@ -40,7 +42,8 @@ export function Add({
 
     try {
       if (mode === "text") {
-        await api.createFromText(text.trim());
+        // Валюта из строки главнее выбранной пилюлей: человек написал её явно.
+        await api.createFromText(text.trim(), currency);
       } else {
         await api.create({
           amount,
@@ -67,8 +70,37 @@ export function Add({
 
         <div className="between" style={{ marginBottom: 14 }}>
           <span className="label">Новая трата</span>
-          <span className="pill ghost">{currency}</span>
+          <button
+            className="pill"
+            onClick={() => {
+              tap();
+              setPickingCurrency((open) => !open);
+            }}
+          >
+            {currency}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
         </div>
+
+        {pickingCurrency && (
+          <div className="chips" style={{ marginBottom: 14, justifyContent: "flex-end" }}>
+            {CURRENCIES.map((code) => (
+              <button
+                key={code}
+                className={code === currency ? "pill on" : "pill ghost"}
+                onClick={() => {
+                  tap();
+                  setCurrency(code);
+                  setPickingCurrency(false);
+                }}
+              >
+                {code}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error !== null && (
           <div className="err" style={{ marginBottom: 12 }}>
@@ -90,6 +122,7 @@ export function Add({
             />
             <p className="dim" style={{ margin: "10px 2px 16px" }}>
               Сумму, валюту и день пойму из строки. Категорию подберу сам.
+              {currency !== defaultCurrency && ` Без валюты в строке запишу в ${currency}.`}
             </p>
           </>
         ) : (
@@ -153,6 +186,8 @@ export function Add({
     </div>
   );
 }
+
+const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 
 function nextDigits(current: string, key: string): string {
   if (key === "⌫") return current.slice(0, -1);
