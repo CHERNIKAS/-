@@ -1,4 +1,4 @@
-import { type Currency, categorize, classify } from "@costnote/core";
+import { type Currency, categorize, classify, digest } from "@costnote/core";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Api, Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
@@ -401,6 +401,91 @@ async function runRetry(api: Api, users: AppUser[]): Promise<void> {
   }
 }
 
+
+/**
+ * Разбор месяца.
+ *
+ * Первого числа, когда месяц уже закрыт. Выключен по умолчанию: это
+ * единственное, что бот пишет «от себя», и навязывать такое нельзя.
+ */
+async function runDigest(api: Api, users: AppUser[], now: Date): Promise<void> {
+  for (const user of users) {
+    if (!user.monthlyDigest) continue;
+    if (isQuiet(user.timezone, now)) continue;
+    if (localHour(user.timezone, now) !== 11) continue;
+
+    const day = localDay(user.timezone, now);
+    if (Number(day.slice(8, 10)) !== 1) continue;
+
+    const month = `${day.slice(0, 7)}-01`;
+    if (user.lastDigestMonth === month) continue;
+
+    const ledgerId = await personalLedgerId(user.id);
+    if (ledgerId === null) continue;
+
+    await db.update(schema.users).set({ lastDigestMonth: month }).where(eq(schema.users.id, user.id));
+
+    const base = user.currency as Currency;
+    const rate = await rateToUsd(base, day);
+    const months = await Promise.all([0, 1, 2, 3].map((back) => monthTotals(ledgerId, month, back, rate)));
+    const [current, ...previous] = months;
+
+    if (current === undefined || current.total === 0) continue;
+
+    try {
+      const notes = await digest(
+        { currency: base, current, previous: previous.filter((m) => m.total > 0) },
+        { apiKey: env.GEMINI_API_KEY, model: env.AI_MODEL },
+      );
+
+      if (notes.length === 0) continue;
+
+      await api
+        .sendMessage(
+          user.tgId,
+          [`<i>Итоги ${current.month}</i>`, "", ...notes.map((n) => `· ${n}`)].join(NL),
+          { parse_mode: "HTML" },
+        )
+        .catch(() => undefined);
+    } catch (error) {
+      console.error("разбор месяца не собрался:", error);
+    }
+  }
+}
+
+/** Агрегаты одного месяца: сумма и разбивка по категориям. */
+async function monthTotals(
+  ledgerId: number,
+  currentMonthStart: string,
+  monthsBack: number,
+  rate: number,
+) {
+  const date = new Date(`${currentMonthStart}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - monthsBack - 1);
+
+  const from = date.toISOString().slice(0, 10);
+  const end = new Date(date);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  end.setUTCDate(0);
+  const to = end.toISOString().slice(0, 10);
+
+  const period = { from, to, label: from.slice(0, 7) };
+  const [total, categories] = await Promise.all([
+    totalUsd(ledgerId, period),
+    byCategory(ledgerId, period),
+  ]);
+
+  return {
+    month: from.slice(0, 7),
+    total: total / rate,
+    byCategory: categories.map((c) => ({
+      title: c.title,
+      total: c.totalUsd / rate,
+      count: 0,
+    })),
+  };
+}
+
 export function startScheduler(bot: Bot): void {
   let ratesDay = "";
 
@@ -427,6 +512,7 @@ export function startScheduler(bot: Bot): void {
       await runRecurring(bot.api, users, now);
       await runWeekly(bot.api, users, now);
       await runRetry(bot.api, users);
+      await runDigest(bot.api, users, now);
       await runSuggestions(bot.api, users, now);
     } catch (error) {
       console.error("тик планировщика упал:", error);

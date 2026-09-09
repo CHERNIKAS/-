@@ -48,6 +48,9 @@ export const users = pgTable(
     /** День последнего недельного итога — чтобы не прислать его дважды. */
     lastWeeklyDay: date("last_weekly_day"),
 
+    /** Месяц, за который разбор уже присылали. */
+    lastDigestMonth: date("last_digest_month"),
+
     /**
      * Куда пишутся траты сейчас. Пусто — в личную книгу.
      *

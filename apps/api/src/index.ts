@@ -166,7 +166,13 @@ function serialize(
 
 app.get("/api/expenses", async (request) => {
   const query = z
-    .object({ from: z.string().optional(), to: z.string().optional(), limit: z.coerce.number().max(200).default(100) })
+    .object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      category: z.string().optional(),
+      payment: z.enum(["card", "cash", "transfer"]).optional(),
+      limit: z.coerce.number().max(200).default(100),
+    })
     .parse(request.query);
 
   const { user, ledgerId } = request;
@@ -177,12 +183,17 @@ app.get("/api/expenses", async (request) => {
   const rate = await baseRate(user, todayDay);
   const categories = await listCategories(ledgerId);
 
+  const category =
+    query.category === undefined ? undefined : await categoryBySlug(ledgerId, query.category);
+
   const rows = await db.query.expenses.findMany({
     where: and(
       eq(schema.expenses.ledgerId, ledgerId),
       gte(schema.expenses.spentAt, from),
       lte(schema.expenses.spentAt, to),
       isNull(schema.expenses.deletedAt),
+      ...(category === undefined ? [] : [eq(schema.expenses.categoryId, category.id)]),
+      ...(query.payment === undefined ? [] : [eq(schema.expenses.payment, query.payment)]),
     ),
     orderBy: [desc(schema.expenses.spentAt), desc(schema.expenses.id)],
     limit: query.limit,

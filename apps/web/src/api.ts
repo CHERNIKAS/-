@@ -89,8 +89,12 @@ export const api = {
 
   expense: (id: number) => request<{ expense: Expense }>(`/expenses/${id}`),
 
-  expenses: (from: string, to: string) =>
-    request<{ expenses: Expense[] }>(`/expenses?from=${from}&to=${to}`),
+  expenses: (from: string, to: string, filters?: { category?: string; payment?: string }) => {
+    const params = new URLSearchParams({ from, to });
+    if (filters?.category !== undefined) params.set("category", filters.category);
+    if (filters?.payment !== undefined) params.set("payment", filters.payment);
+    return request<{ expenses: Expense[] }>(`/expenses?${params.toString()}`);
+  },
 
   createFromText: (text: string, currency?: string) =>
     request<{ created: Expense[] }>("/expenses", {

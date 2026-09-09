@@ -6,6 +6,12 @@ import { type Range, rangeFor, rangeTitle } from "../periods.js";
 import { CategoryIcon, IconSearch } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 
+const PAYMENT_TITLE: Record<string, string> = {
+  card: "Карта",
+  cash: "Наличные",
+  transfer: "Перевод",
+};
+
 /**
  * История.
  *
@@ -27,13 +33,19 @@ export function History({
   const [query, setQuery] = useState("");
   const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
   const [error, setError] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [payment, setPayment] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setError(null);
 
     api
-      .expenses(range.from, range.to)
+      .expenses(range.from, range.to, {
+        ...(category === null ? {} : { category }),
+        ...(payment === null ? {} : { payment }),
+      })
       .then((result) => {
         if (alive) setExpenses(result.expenses);
       })
@@ -44,7 +56,7 @@ export function History({
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, category, payment]);
 
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -86,10 +98,66 @@ export function History({
 
       <PeriodPicker today={today} range={range} onChange={setRange} />
 
-      <div className="between" style={{ margin: "16px 2px 16px" }}>
+      <div className="between" style={{ margin: "16px 2px 12px" }}>
         <span className="label">{rangeTitle(range)}</span>
         <span className="num muted">{money(total, currency)}</span>
       </div>
+
+      <button
+        className="pill ghost"
+        style={{ marginBottom: 14 }}
+        onClick={() => setFiltersOpen((open) => !open)}
+      >
+        {category === null && payment === null
+          ? "Фильтры"
+          : `Фильтры · ${[category === null ? null : categories.find((c) => c.slug === category)?.title, payment === null ? null : PAYMENT_TITLE[payment]].filter(Boolean).join(", ")}`}
+      </button>
+
+      {filtersOpen && (
+        <div className="card" style={{ padding: 14, marginBottom: 16 }}>
+          <p className="label" style={{ marginBottom: 8 }}>
+            Категория
+          </p>
+          <div className="chips" style={{ marginBottom: 14 }}>
+            <button
+              className={category === null ? "pill on" : "pill ghost"}
+              onClick={() => setCategory(null)}
+            >
+              Все
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c.slug}
+                className={category === c.slug ? "pill on" : "pill ghost"}
+                onClick={() => setCategory(c.slug)}
+              >
+                {c.title}
+              </button>
+            ))}
+          </div>
+
+          <p className="label" style={{ marginBottom: 8 }}>
+            Оплата
+          </p>
+          <div className="chips">
+            <button
+              className={payment === null ? "pill on" : "pill ghost"}
+              onClick={() => setPayment(null)}
+            >
+              Любая
+            </button>
+            {Object.entries(PAYMENT_TITLE).map(([key, title]) => (
+              <button
+                key={key}
+                className={payment === key ? "pill on" : "pill ghost"}
+                onClick={() => setPayment(key)}
+              >
+                {title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error !== null && <div className="err">{error}</div>}
       {expenses === null && error === null && <p className="spinner">Загружаю…</p>}
