@@ -94,9 +94,8 @@ function readExcel(file: Uint8Array): Sheet {
 /**
  * PDF: текстовый слой построчно.
  *
- * Таблица в PDF — это не таблица, а набор строк текста, поэтому колонки
- * восстанавливаются по группам пробелов. На сканах без текстового слоя вернётся
- * пусто — это честнее, чем выдумывать содержимое.
+ * На сканах без текстового слоя вернётся пусто — это честнее, чем выдумывать
+ * содержимое.
  */
 async function readPdf(file: Uint8Array): Promise<Sheet> {
   const document = await getDocumentProxy(file);
@@ -106,5 +105,33 @@ async function readPdf(file: Uint8Array): Promise<Sheet> {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== "")
-    .map((line) => line.split(/\s{2,}|\t/).map((cell) => cell.trim()));
+    .map(splitPdfLine);
 }
+
+/**
+ * Строка операции в PDF — сплошной текст без табуляций:
+ * «2026.06.01, 20:05 MIGROS-154203,ISTANBUL,TUR -5.39 USDC».
+ *
+ * Поэтому разбираем её по форме, а не по пробелам: дата в начале, сумма с
+ * валютой в конце, всё между ними — название. Делить по пробелам здесь нельзя:
+ * в названии магазина их сколько угодно.
+ *
+ * Не подошло — откатываемся на деление по группам пробелов, как в табличных PDF.
+ */
+export function splitPdfLine(line: string): string[] {
+  const match = PDF_LINE.exec(line);
+  if (match === null) return line.split(/\s{2,}|\t/).map((cell) => cell.trim());
+
+  const [, date, time, title, amount, currency] = match;
+
+  return [
+    date ?? "",
+    time ?? "",
+    (title ?? "").trim(),
+    (amount ?? "").replace(/\s/g, ""),
+    currency ?? "",
+  ];
+}
+
+const PDF_LINE =
+  /^(\d{2,4}[.\-/]\d{1,2}[.\-/]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)?\s*(.*?)\s+([+-]?\d[\d\s.,]*)\s*([A-Za-z]{3,5})?$/u;
