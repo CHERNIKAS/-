@@ -142,6 +142,10 @@ function serialize(
     spentAt: expense.spentAt,
     merchant: expense.merchant ?? "",
     note: expense.note,
+    payment: expense.payment,
+    // Откуда взялась категория: null — сработало правило пользователя.
+    confidence: expense.confidence === null ? null : Number(expense.confidence),
+    source: expense.source,
     needsReview: expense.needsReview,
     category: category === null ? null : { slug: category.slug, title: category.title, emoji: category.emoji },
   };
@@ -283,6 +287,21 @@ const patchSchema = z.object({
   spentAt: z.string().optional(),
   merchant: z.string().max(128).optional(),
   note: z.string().max(500).nullable().optional(),
+  payment: z.enum(["card", "cash", "transfer"]).optional(),
+});
+
+app.get("/api/expenses/:id", async (request, reply) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+  const expense = await expenseById(id);
+
+  if (!expense || expense.ledgerId !== request.ledgerId || expense.deletedAt !== null) {
+    await reply.code(404).send({ error: "трата не найдена" });
+    return;
+  }
+
+  const categories = await listCategories(request.ledgerId);
+  const rate = await baseRate(request.user, today());
+  return { expense: serialize(expense, categories, rate) };
 });
 
 app.patch("/api/expenses/:id", async (request, reply) => {
@@ -309,6 +328,7 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   if (body.amount !== undefined) patch["amount"] = body.amount.toFixed(2);
   if (body.merchant !== undefined) patch["merchant"] = body.merchant;
   if (body.note !== undefined) patch["note"] = body.note;
+  if (body.payment !== undefined) patch["payment"] = body.payment;
   if (body.spentAt !== undefined) patch["spentAt"] = body.spentAt;
 
   if (body.currency !== undefined || body.spentAt !== undefined) {

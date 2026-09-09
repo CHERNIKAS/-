@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Category } from "../api.js";
 import { moneyExact } from "../format.js";
+import { CategorySheet } from "../CategorySheet.js";
 import { IconKeypad, IconText } from "../icons.js";
 import { notify, tap } from "../telegram.js";
 
@@ -61,7 +62,21 @@ export function Add({
     }
   }
 
-  const visible = allCategories ? categories : categories.slice(0, 5);
+  const visible = categories.slice(0, 5);
+
+  if (allCategories) {
+    return (
+      <CategorySheet
+        categories={categories}
+        current={slug}
+        onClose={() => setAllCategories(false)}
+        onPick={(picked) => {
+          setSlug(picked);
+          setAllCategories(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="sheet" onClick={onClose}>
@@ -144,11 +159,9 @@ export function Add({
                   {c.title}
                 </button>
               ))}
-              {!allCategories && categories.length > 5 && (
-                <button className="pill ghost" onClick={() => setAllCategories(true)}>
-                  Все категории
-                </button>
-              )}
+              <button className="pill ghost" onClick={() => setAllCategories(true)}>
+                Все категории
+              </button>
             </div>
 
             <div className="keys" style={{ marginBottom: 14 }}>

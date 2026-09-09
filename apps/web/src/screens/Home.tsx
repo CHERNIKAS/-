@@ -1,4 +1,4 @@
-import type { State } from "../api.js";
+import type { Expense, State } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
@@ -16,7 +16,7 @@ export function Home({
   onCurrency,
 }: {
   state: State;
-  onExpense: (id: number) => void;
+  onExpense: (expense: Expense) => void;
   onCurrency: () => void;
 }) {
   const { user, totals, recent, today } = state;
@@ -85,7 +85,7 @@ export function Home({
           recent.slice(0, 12).map((expense, index) => {
             const color = categoryColor(expense.category?.slug, state.categories);
             return (
-              <button key={expense.id} className="item" onClick={() => onExpense(expense.id)}>
+              <button key={expense.id} className="item" onClick={() => onExpense(expense)}>
                 <span className="tile" style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}>
                   <CategoryIcon slug={expense.category?.slug} />
                 </span>

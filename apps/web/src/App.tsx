@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type State } from "./api.js";
-import { moneyExact } from "./format.js";
+import { api, type Expense, type State } from "./api.js";
+import { ExpenseSheet } from "./ExpenseSheet.js";
 import { Add } from "./screens/Add.js";
 import { Analytics } from "./screens/Analytics.js";
 import { History } from "./screens/History.js";
@@ -23,7 +23,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const reload = useCallback(async () => {
@@ -51,8 +51,6 @@ export function App() {
   }
 
   if (state === null) return <p className="spinner">Загружаю…</p>;
-
-  const expense = state.recent.find((e) => e.id === editing) ?? null;
 
   return (
     <>
@@ -169,58 +167,18 @@ export function App() {
         />
       )}
 
-      {expense !== null && (
-        <div className="sheet" onClick={() => setEditing(null)}>
-          <div onClick={(e) => e.stopPropagation()}>
-            <div className="grabber" />
-            <p className="dim">{expense.merchant === "" ? "Трата" : expense.merchant}</p>
-            <p className="amount" style={{ marginTop: 4 }}>
-              {moneyExact(expense.amount, expense.currency)}
-            </p>
-
-            <p className="dim" style={{ margin: "18px 2px 8px" }}>
-              Категория
-            </p>
-            <div className="chips" style={{ marginBottom: 20 }}>
-              {state.categories.map((c) => (
-                <button
-                  key={c.slug}
-                  className={c.slug === expense.category?.slug ? "pill on" : "pill ghost"}
-                  onClick={() => {
-                    tap();
-                    void api
-                      .update(expense.id, { categorySlug: c.slug })
-                      .then(() => {
-                        setEditing(null);
-                        return reload();
-                      })
-                      .catch(() => notify("error"));
-                  }}
-                >
-                  {c.title}
-                </button>
-              ))}
-            </div>
-
-            <button
-              className="cta"
-              style={{ background: "rgba(255,120,120,.18)", color: "#ffb4b4" }}
-              onClick={() => {
-                void api
-                  .remove(expense.id)
-                  .then(() => {
-                    notify("success");
-                    setEditing(null);
-                    return reload();
-                  })
-                  .catch(() => notify("error"));
-              }}
-            >
-              Удалить трату
-            </button>
-          </div>
-        </div>
+      {editing !== null && (
+        <ExpenseSheet
+          expense={editing}
+          categories={state.categories}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void reload();
+          }}
+        />
       )}
+
     </>
   );
 }

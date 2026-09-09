@@ -29,6 +29,9 @@ export type Expense = {
   spentAt: string;
   merchant: string;
   note: string | null;
+  payment: "card" | "cash" | "transfer";
+  confidence: number | null;
+  source: "bot" | "app";
   needsReview: boolean;
   category: Category | null;
 };
@@ -60,6 +63,8 @@ export type Analytics = {
 
 export const api = {
   state: () => request<State>("/state"),
+
+  expense: (id: number) => request<{ expense: Expense }>(`/expenses/${id}`),
 
   expenses: (from: string, to: string) =>
     request<{ expenses: Expense[] }>(`/expenses?from=${from}&to=${to}`),
