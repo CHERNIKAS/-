@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, type Category } from "../api.js";
 import { moneyExact } from "../format.js";
 import { CategorySheet } from "../CategorySheet.js";
+import { useSheetDrag } from "../useSheetDrag.js";
 import { useBodyLock } from "../useBodyLock.js";
 import { IconKeypad, IconText } from "../icons.js";
 import { notify, tap } from "../telegram.js";
@@ -33,6 +34,7 @@ export function Add({
   const [allCategories, setAllCategories] = useState(false);
   const [currency, setCurrency] = useState(defaultCurrency);
   useBodyLock(true);
+  const drag = useSheetDrag(onClose);
   const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const amount = Number(digits.replace(",", ".")) || 0;
@@ -82,8 +84,10 @@ export function Add({
 
   return (
     <div className="sheet" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-        <div className="grabber" />
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", ...drag.sheetStyle }}>
+        <div className="grabber" {...drag.handleProps} style={{ padding: "10px 0", margin: "-10px auto 6px", width: 80, background: "none" }}>
+          <span style={{ display: "block", width: 38, height: 4, borderRadius: 99, background: "rgba(255,255,255,.35)", margin: "0 auto" }} />
+        </div>
 
         <button
           onClick={onClose}

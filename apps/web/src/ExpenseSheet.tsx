@@ -5,6 +5,7 @@ import { moneyExact } from "./format.js";
 import { CategoryIcon } from "./icons.js";
 import { categoryColor, tint } from "./palette.js";
 import { notify, tap } from "./telegram.js";
+import { useSheetDrag } from "./useSheetDrag.js";
 import { useBodyLock } from "./useBodyLock.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
@@ -45,6 +46,7 @@ export function ExpenseSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useBodyLock(true);
+  const drag = useSheetDrag(onClose);
 
   const category = categories.find((c) => c.slug === slug) ?? null;
   const color = categoryColor(slug ?? undefined, categories);
@@ -104,8 +106,10 @@ export function ExpenseSheet({
 
   return (
     <div className="sheet" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-        <div className="grabber" />
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", ...drag.sheetStyle }}>
+        <div className="grabber" {...drag.handleProps} style={{ padding: "10px 0", margin: "-10px auto 6px", width: 80, background: "none" }}>
+          <span style={{ display: "block", width: 38, height: 4, borderRadius: 99, background: "rgba(255,255,255,.35)", margin: "0 auto" }} />
+        </div>
 
         <button
           onClick={onClose}
