@@ -105,6 +105,30 @@ export const api = {
   settings: (patch: Record<string, unknown>) =>
     request<{ ok: true }>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
 
+  categories: () =>
+    request<{ limit: number; categories: { slug: string; title: string; emoji: string; count: number; total: number }[] }>(
+      "/categories",
+    ),
+
+  renameCategory: (slug: string, title: string) =>
+    request<{ ok: true }>(`/categories/${slug}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  mergeCategory: (slug: string, into: string) =>
+    request<{ ok: true }>(`/categories/${slug}/merge`, {
+      method: "POST",
+      body: JSON.stringify({ into }),
+    }),
+
+  rules: () =>
+    request<{ rules: { id: number; pattern: string; hits: number; title: string; slug: string }[] }>(
+      "/rules",
+    ),
+
+  deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
+
   createCategory: (title: string, emoji: string) =>
     request<{ category: Category | null }>("/categories", {
       method: "POST",

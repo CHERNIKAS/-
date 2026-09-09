@@ -5,6 +5,8 @@ import {
   categorize,
   classify,
   parseMessage,
+  FALLBACK_CATEGORY_SLUG,
+  MAX_CATEGORIES,
   buildPeriod,
   PERIOD_KEYS,
   type PeriodKey,
@@ -32,7 +34,7 @@ import {
   userRules,
 } from "@costnote/core/data";
 import cors from "@fastify/cors";
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { z } from "zod";
 import { verifyInitData } from "./auth.js";
@@ -430,10 +432,154 @@ app.patch("/api/settings", async (request) => {
   return { ok: true };
 });
 
-app.post("/api/categories", async (request) => {
+
+/**
+ * Категории с числом трат за 30 дней.
+ *
+ * Число рядом с названием отвечает на вопрос «а живая ли она»: категории
+ * с нулём обычно и есть кандидаты на слияние или удаление.
+ */
+app.get("/api/categories", async (request) => {
+  const { ledgerId } = request;
+  const todayDay = today();
+  const from = shiftDay(todayDay, 29);
+
+  const categories = await listCategories(ledgerId);
+
+  const counts = await db
+    .select({
+      categoryId: schema.expenses.categoryId,
+      count: sql<string>`count(*)`,
+      total: sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`,
+    })
+    .from(schema.expenses)
+    .where(
+      and(
+        eq(schema.expenses.ledgerId, ledgerId),
+        gte(schema.expenses.spentAt, from),
+        isNull(schema.expenses.deletedAt),
+      ),
+    )
+    .groupBy(schema.expenses.categoryId);
+
+  const rate = await baseRate(request.user, todayDay);
+
+  return {
+    limit: MAX_CATEGORIES,
+    categories: categories.map((c) => {
+      const stat = counts.find((r) => r.categoryId === c.id);
+      return {
+        slug: c.slug,
+        title: c.title,
+        emoji: c.emoji,
+        count: Number(stat?.count ?? 0),
+        total: Number(stat?.total ?? 0) / rate,
+      };
+    }),
+  };
+});
+
+app.patch("/api/categories/:slug", async (request, reply) => {
+  const { slug } = z.object({ slug: z.string() }).parse(request.params);
+  const body = z.object({ title: z.string().min(1).max(64) }).parse(request.body);
+
+  const category = await categoryBySlug(request.ledgerId, slug);
+  if (!category) {
+    await reply.code(404).send({ error: "категория не найдена" });
+    return;
+  }
+
+  await db
+    .update(schema.categories)
+    .set({ title: body.title })
+    .where(eq(schema.categories.id, category.id));
+
+  return { ok: true };
+});
+
+/**
+ * Слияние.
+ *
+ * Траты и правила переезжают в целевую категорию, исходная уходит в архив.
+ * Ничего не удаляется: потерять историю из-за неудачной уборки списка было бы
+ * обиднее, чем жить с лишней строкой.
+ */
+app.post("/api/categories/:slug/merge", async (request, reply) => {
+  const { slug } = z.object({ slug: z.string() }).parse(request.params);
+  const { into } = z.object({ into: z.string() }).parse(request.body);
+
+  const source = await categoryBySlug(request.ledgerId, slug);
+  const target = await categoryBySlug(request.ledgerId, into);
+
+  if (!source || !target || source.id === target.id) {
+    await reply.code(400).send({ error: "нечего сливать" });
+    return;
+  }
+
+  if (source.slug === FALLBACK_CATEGORY_SLUG) {
+    await reply.code(400).send({ error: "«Прочее» нельзя убрать: туда падает всё незнакомое" });
+    return;
+  }
+
+  await db
+    .update(schema.expenses)
+    .set({ categoryId: target.id })
+    .where(eq(schema.expenses.categoryId, source.id));
+
+  await db
+    .update(schema.rules)
+    .set({ categoryId: target.id })
+    .where(eq(schema.rules.categoryId, source.id));
+
+  await db
+    .update(schema.categories)
+    .set({ archivedAt: new Date() })
+    .where(eq(schema.categories.id, source.id));
+
+  return { ok: true };
+});
+
+/** Выученные правила: видно, чему бот научился, и любое можно отменить. */
+app.get("/api/rules", async (request) => {
+  const rows = await db
+    .select({
+      id: schema.rules.id,
+      pattern: schema.rules.pattern,
+      hits: schema.rules.hits,
+      title: schema.categories.title,
+      slug: schema.categories.slug,
+    })
+    .from(schema.rules)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.rules.categoryId))
+    .where(eq(schema.rules.userId, request.user.id))
+    .orderBy(desc(schema.rules.hits))
+    .limit(200);
+
+  return { rules: rows };
+});
+
+app.delete("/api/rules/:id", async (request) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+
+  await db
+    .delete(schema.rules)
+    .where(and(eq(schema.rules.id, id), eq(schema.rules.userId, request.user.id)));
+
+  return { ok: true };
+});
+
+app.post("/api/categories", async (request, reply) => {
   const body = z
     .object({ title: z.string().min(1).max(64), emoji: z.string().max(8).default("🏷") })
     .parse(request.body);
+
+  // Потолок не про экономию места: с полусотней категорий разрез перестаёт
+  // что-либо показывать, и дальше полезнее сливать, а не плодить.
+  const existing = await listCategories(request.ledgerId);
+  if (existing.length >= MAX_CATEGORIES) {
+    await reply.code(400).send({ error: `Больше ${MAX_CATEGORIES} категорий — пора сливать похожие` });
+    return;
+  }
 
   const [created] = await db
     .insert(schema.categories)

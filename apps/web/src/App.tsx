@@ -3,6 +3,7 @@ import { api, type Expense, type State } from "./api.js";
 import { ExpenseSheet } from "./ExpenseSheet.js";
 import { Add } from "./screens/Add.js";
 import { Analytics } from "./screens/Analytics.js";
+import { Categories } from "./screens/Categories.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
 import { Settings } from "./screens/Settings.js";
@@ -25,6 +26,7 @@ export function App() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
+  const [more, setMore] = useState<"settings" | "categories">("settings");
 
   const reload = useCallback(async () => {
     try {
@@ -66,7 +68,36 @@ export function App() {
           onExpense={setEditing}
         />
       )}
-      {tab === "settings" && <Settings state={state} onChanged={() => void reload()} />}
+      {tab === "settings" && (
+        <>
+          <div className="chips" style={{ padding: "12px 0 18px" }}>
+            <button
+              className={more === "settings" ? "pill on" : "pill ghost"}
+              onClick={() => {
+                tap();
+                setMore("settings");
+              }}
+            >
+              Настройки
+            </button>
+            <button
+              className={more === "categories" ? "pill on" : "pill ghost"}
+              onClick={() => {
+                tap();
+                setMore("categories");
+              }}
+            >
+              Категории
+            </button>
+          </div>
+
+          {more === "settings" ? (
+            <Settings state={state} onChanged={() => void reload()} />
+          ) : (
+            <Categories currency={state.user.currency} onChanged={() => void reload()} />
+          )}
+        </>
+      )}
 
       <nav className="dock">
         {(
