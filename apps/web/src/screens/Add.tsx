@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, type Category } from "../api.js";
 import { moneyExact } from "../format.js";
 import { CategorySheet } from "../CategorySheet.js";
+import { useBodyLock } from "../useBodyLock.js";
 import { IconKeypad, IconText } from "../icons.js";
 import { notify, tap } from "../telegram.js";
 
@@ -31,6 +32,7 @@ export function Add({
   const [error, setError] = useState<string | null>(null);
   const [allCategories, setAllCategories] = useState(false);
   const [currency, setCurrency] = useState(defaultCurrency);
+  useBodyLock(true);
   const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const amount = Number(digits.replace(",", ".")) || 0;
@@ -80,10 +82,31 @@ export function Add({
 
   return (
     <div className="sheet" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
         <div className="grabber" />
 
-        <div className="between" style={{ marginBottom: 14 }}>
+        <button
+          onClick={onClose}
+          aria-label="Закрыть"
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 14,
+            width: 32,
+            height: 32,
+            borderRadius: 999,
+            background: "rgba(255,255,255,.12)",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 16,
+            lineHeight: 1,
+            color: "var(--ink-2)",
+          }}
+        >
+          ✕
+        </button>
+
+        <div className="between" style={{ marginBottom: 14, paddingRight: 40 }}>
           <span className="label">Новая трата</span>
           <button
             className="pill"

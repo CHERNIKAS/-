@@ -5,6 +5,7 @@ import { moneyExact } from "./format.js";
 import { CategoryIcon } from "./icons.js";
 import { categoryColor, tint } from "./palette.js";
 import { notify, tap } from "./telegram.js";
+import { useBodyLock } from "./useBodyLock.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 
@@ -43,6 +44,7 @@ export function ExpenseSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useBodyLock(true);
 
   const category = categories.find((c) => c.slug === slug) ?? null;
   const color = categoryColor(slug ?? undefined, categories);
@@ -102,8 +104,30 @@ export function ExpenseSheet({
 
   return (
     <div className="sheet" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
         <div className="grabber" />
+
+        <button
+          onClick={onClose}
+          aria-label="Закрыть"
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 14,
+            width: 32,
+            height: 32,
+            borderRadius: 999,
+            background: "rgba(255,255,255,.12)",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 16,
+            lineHeight: 1,
+            color: "var(--ink-2)",
+          }}
+        >
+          ✕
+        </button>
+
 
         {error !== null && (
           <div className="err" style={{ marginBottom: 14 }}>

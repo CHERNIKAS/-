@@ -3,6 +3,7 @@ import { api, type Category } from "./api.js";
 import { CategoryIcon, IconSearch } from "./icons.js";
 import { categoryColor, tint } from "./palette.js";
 import { notify, tap } from "./telegram.js";
+import { useBodyLock } from "./useBodyLock.js";
 
 /**
  * Выбор категории.
@@ -24,6 +25,7 @@ export function CategorySheet({
 }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  useBodyLock(true);
 
   const needle = query.trim().toLowerCase();
   const found = useMemo(
