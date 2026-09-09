@@ -56,7 +56,10 @@ async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<
     legendRows: Math.min(segments.length, 6),
   });
 
-  const png = new Resvg(svg, { fitTo: { mode: "width", value: 520 } })
+  const png = new Resvg(svg, {
+    fitTo: { mode: "width", value: 520 },
+    font: { loadSystemFonts: true, defaultFontFamily: "Noto Sans" },
+  })
     .render()
     .asPng();
 

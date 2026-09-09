@@ -20,9 +20,18 @@ export function money(amount: number, currency: Currency): string {
   return `${CURRENCY_SYMBOL[currency]}${formatted}`;
 }
 
-/** Компактная сумма без копеек — для итогов, где копейки только мешают. */
+/**
+ * Компактная сумма для итогов: копейки там только мешают.
+ *
+ * Кроме мелких сумм — «₺15 ≈ $0» выглядит как ошибка, хотя это честные
+ * тридцать центов. Ниже десяти показываем два знака.
+ */
 export function moneyShort(amount: number, currency: Currency): string {
-  const formatted = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(amount);
+  const digits = Math.abs(amount) < 10 && amount !== 0 ? 2 : 0;
+  const formatted = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(amount);
   return `${CURRENCY_SYMBOL[currency]}${formatted}`;
 }
 

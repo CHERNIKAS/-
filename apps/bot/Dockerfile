@@ -1,6 +1,8 @@
 FROM node:24-alpine
 
-RUN corepack enable
+# Шрифты нужны resvg: на голом alpine их нет вовсе, и текст на картинке
+# молча не рисуется — ни сумма в центре кольца, ни подписи легенды.
+RUN apk add --no-cache font-noto ttf-dejavu && corepack enable
 
 WORKDIR /app
 
