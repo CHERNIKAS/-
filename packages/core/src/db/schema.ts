@@ -144,6 +144,16 @@ export const expenses = pgTable(
     /** Модель ещё не ответила: категория временная, воркер вернётся к трате. */
     needsReview: boolean("needs_review").notNull().default(false),
 
+    /** Из какого импорта пришла трата — по нему же импорт откатывается целиком. */
+    importId: integer("import_id"),
+    /**
+     * Отпечаток строки выписки: дата, сумма и описание.
+     *
+     * Повторный импорт того же файла не задваивает траты, а пересечения с
+     * тем, что уже внесено руками, видно до применения.
+     */
+    fingerprint: varchar({ length: 64 }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -152,6 +162,7 @@ export const expenses = pgTable(
     index("expenses_ledger_spent_at_idx").on(t.ledgerId, t.spentAt),
     index("expenses_category_idx").on(t.categoryId),
     index("expenses_needs_review_idx").on(t.needsReview),
+    index("expenses_fingerprint_idx").on(t.ledgerId, t.fingerprint),
   ],
 );
 
@@ -278,3 +289,33 @@ export const recurring = pgTable(
   },
   (t) => [index("recurring_ledger_idx").on(t.ledgerId, t.active)],
 );
+
+export const importStatusEnum = pgEnum("import_status", ["preview", "applied", "cancelled"]);
+
+/**
+ * Импорт банковской выписки.
+ *
+ * Разбор и применение разнесены: сначала файл превращается в предпросмотр, и
+ * только после подтверждения строки становятся тратами. Иначе кривая карта
+ * формата молча засоряет историю сотнями записей.
+ */
+export const imports = pgTable("imports", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  ledgerId: integer("ledger_id")
+    .notNull()
+    .references(() => ledgers.id, { onDelete: "cascade" }),
+
+  filename: varchar({ length: 255 }).notNull(),
+  status: importStatusEnum().notNull().default("preview"),
+  /** Разобранные строки до применения: JSON, живёт до подтверждения. */
+  payload: text(),
+  /** Карта формата, которую определила модель — видно, как файл был понят. */
+  mapping: text(),
+  rowCount: integer("row_count").notNull().default(0),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+});

@@ -6,6 +6,7 @@ import { sendAnalytics, switchPeriod } from "./handlers/analytics.js";
 import { handleSettingsCallback, settingsKeyboard, settingsText } from "./handlers/settings.js";
 import { handleCallback } from "./handlers/callbacks.js";
 import { handleEditedMessage, handleExpenseMessage } from "./handlers/expense.js";
+import { applyImport, cancelImportFlow, handleDocument } from "./handlers/import.js";
 import { mainKeyboard } from "./keyboards.js";
 import { refreshPanel } from "./panel.js";
 import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
@@ -20,6 +21,7 @@ import {
   ledgerByToken,
   ledgersOf,
   membersOf,
+  undoImport,
   updateUser,
 } from "@costnote/core/data";
 
@@ -133,6 +135,8 @@ bot.command("help", async (ctx) => {
       "Валюту понимаю словами и символами: лир, tl, ₺, баксов, $, грн, ₴, евро, €.",
       "Не указал — возьму твою основную.",
       "",
+      "Выписку из банка можно просто прислать файлом — CSV, XLSX или PDF.",
+      "",
       "<b>Команды</b>",
       "/day — сколько потрачено сегодня",
       "/month — сколько за месяц",
@@ -212,6 +216,25 @@ bot.on("callback_query:data", async (ctx) => {
     return;
   }
 
+  if (data.startsWith("i:")) {
+    const [, action, rawId] = data.split(":");
+    const importId = Number(rawId);
+
+    if (action === "apply") {
+      await applyImport(ctx, user, importId);
+    } else if (action === "undo") {
+      const removed = await undoImport(importId);
+      await ctx.editMessageText(`<i>Импорт отменён, убрано ${removed} трат</i>`, {
+        parse_mode: "HTML",
+      });
+      await ctx.answerCallbackQuery();
+    } else {
+      await cancelImportFlow(ctx, importId);
+    }
+
+    return;
+  }
+
   if (data.startsWith("g:")) {
     const [, action, raw] = data.split(":");
 
@@ -244,6 +267,12 @@ bot.on("callback_query:data", async (ctx) => {
   }
 
   await handleCallback(ctx, user, ledgerId);
+});
+
+bot.on("message:document", async (ctx) => {
+  if (!ctx.from) return;
+  const { user, ledgerId } = await ensureUser(ctx.from);
+  await handleDocument(ctx, user, ledgerId);
 });
 
 bot.on("message:text", async (ctx) => {
