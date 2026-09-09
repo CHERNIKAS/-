@@ -24,13 +24,13 @@ export function History({
   today,
   currency,
   onExpense,
-  onDelete,
+  onSwipe,
 }: {
   categories: { slug: string; title: string; emoji: string }[];
   today: string;
   currency: string;
   onExpense: (expense: Expense) => void;
-  onDelete: (id: number) => Promise<void>;
+  onSwipe: (expense: Expense, reset: () => void) => void;
 }) {
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [query, setQuery] = useState("");
@@ -185,7 +185,7 @@ export function History({
 
           <div className="card rows" style={{ padding: "2px 16px" }}>
             {list.map((expense) => (
-              <SwipeRow key={expense.id} onDelete={() => onDelete(expense.id)}>
+              <SwipeRow key={expense.id} onSwipe={(reset) => onSwipe(expense, reset)}>
               <button className="item" onClick={() => onExpense(expense)}>
                 <span
                   className="tile"

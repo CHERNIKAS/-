@@ -1,117 +1,109 @@
-import { type ReactNode, useRef, useState } from "react";
-import { notify, tap } from "./telegram.js";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { tap } from "./telegram.js";
 
 /**
- * Строка списка со свайпом влево.
+ * Строка, которую можно смахнуть влево.
  *
- * Удаление в два шага: свайп открывает кнопку, нажатие спрашивает
- * подтверждение. Одного жеста мало — смахнуть строку случайно проще, чем
- * попасть по кнопке, а трата не должна исчезать без спроса.
+ * Карточка уходит за пальцем и улетает, а подтверждение спрашивается по
+ * центру экрана. Кнопки под строкой нет намеренно: она занимает место, видна
+ * до всякого жеста и превращает смахивание в лишний шаг перед нажатием.
  */
 
-const OPEN_AT = 72;
+/** Дальше этого отпускание считается смахиванием, а не случайным движением. */
+const THRESHOLD = 96;
 
 export function SwipeRow({
   children,
-  onDelete,
-  label = "Удалить",
+  onSwipe,
 }: {
   children: ReactNode;
-  onDelete: () => Promise<void> | void;
-  label?: string;
+  /** Вызывается после того, как строка улетела. reset возвращает её на место. */
+  onSwipe: (reset: () => void) => void;
 }) {
   const [offset, setOffset] = useState(0);
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [flown, setFlown] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const node = useRef<HTMLDivElement | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const horizontal = useRef(false);
 
+  /**
+   * Слушатель ставится вручную, потому что React вешает touchmove пассивно, а
+   * без preventDefault страница уезжает вместе со строкой.
+   */
+  useEffect(() => {
+    const element = node.current;
+    if (element === null) return;
+
+    function onMove(event: TouchEvent) {
+      const touch = event.touches[0];
+      if (touch === undefined || start.current === null) return;
+
+      const dx = touch.clientX - start.current.x;
+      const dy = touch.clientY - start.current.y;
+
+      if (!horizontal.current && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        horizontal.current = true;
+        setDragging(true);
+      }
+
+      if (!horizontal.current) return;
+
+      event.preventDefault();
+      setOffset(Math.min(0, dx));
+    }
+
+    element.addEventListener("touchmove", onMove, { passive: false });
+    return () => element.removeEventListener("touchmove", onMove);
+  }, []);
+
   function onTouchStart(event: React.TouchEvent) {
     const touch = event.touches[0];
-    if (touch === undefined) return;
+    if (touch === undefined || flown) return;
     start.current = { x: touch.clientX, y: touch.clientY };
     horizontal.current = false;
   }
 
-  function onTouchMove(event: React.TouchEvent) {
-    const touch = event.touches[0];
-    if (touch === undefined || start.current === null) return;
-
-    const dx = touch.clientX - start.current.x;
-    const dy = touch.clientY - start.current.y;
-
-    // Направление жеста решается один раз: иначе список дёргается вбок при
-    // обычной вертикальной прокрутке.
-    if (!horizontal.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
-      horizontal.current = true;
-    }
-
-    if (!horizontal.current) return;
-    setOffset(Math.max(-96, Math.min(0, dx)));
-  }
-
   function onTouchEnd() {
-    if (!horizontal.current) return;
-    const open = offset < -OPEN_AT / 2;
-    setOffset(open ? -OPEN_AT : 0);
-    if (!open) setConfirming(false);
     start.current = null;
-  }
+    setDragging(false);
 
-  async function remove() {
-    if (busy) return;
+    if (!horizontal.current) return;
+    horizontal.current = false;
 
-    if (!confirming) {
-      tap("medium");
-      setConfirming(true);
+    if (offset > -THRESHOLD) {
+      setOffset(0);
       return;
     }
 
-    setBusy(true);
-    try {
-      await onDelete();
-    } catch {
-      notify("error");
-    } finally {
-      setBusy(false);
+    tap("medium");
+    setFlown(true);
+    setOffset(-window.innerWidth);
+    onSwipe(() => {
+      setFlown(false);
       setOffset(0);
-      setConfirming(false);
-    }
+    });
   }
 
-  return (
-    <div style={{ position: "relative", overflow: "hidden" }}>
-      <button
-        onClick={() => void remove()}
-        style={{
-          position: "absolute",
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: confirming ? 96 : OPEN_AT,
-          borderRadius: 12,
-          margin: "6px 0",
-          fontSize: 12,
-          fontWeight: 600,
-          color: "#ffd7d7",
-          background: confirming ? "rgba(255,90,90,.45)" : "rgba(255,120,120,.22)",
-        }}
-      >
-        {busy ? "…" : confirming ? "Точно?" : label}
-      </button>
+  // Пока строка улетает, она освобождает место плавно, а не рывком.
+  const collapsed = flown ? { maxHeight: 0, opacity: 0 } : {};
 
-      <div
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        style={{
-          transform: `translateX(${offset}px)`,
-          transition: start.current === null ? "transform .18s ease" : "none",
-          background: "transparent",
-        }}
-      >
-        {children}
-      </div>
+  return (
+    <div
+      ref={node}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+      style={{
+        touchAction: "pan-y",
+        overflow: "hidden",
+        transform: `translateX(${offset}px)`,
+        opacity: flown ? 0 : 1 + Math.max(-0.6, offset / 400),
+        transition: dragging ? "none" : "transform .22s ease, opacity .22s ease, max-height .22s ease",
+        ...collapsed,
+      }}
+    >
+      {children}
     </div>
   );
 }

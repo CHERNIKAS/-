@@ -10,7 +10,13 @@ import { notify, tap } from "../telegram.js";
  * нет: она превращает общий бюджет во взаиморасчёты, а нужен был просто общий
  * котёл.
  */
-export function Shared({ onChanged }: { onChanged: () => void }) {
+export function Shared({
+  onChanged,
+  onRemoveMember,
+}: {
+  onChanged: () => void;
+  onRemoveMember: (member: { userId: number; name: string }, reset: () => void) => void;
+}) {
   const [state, setState] = useState<SharedState | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -78,16 +84,12 @@ export function Shared({ onChanged }: { onChanged: () => void }) {
               </span>
             </div>
           ) : (
-            <SwipeRow
-              key={member.userId}
-              label="Убрать"
-              onDelete={() => act(() => api.removeMember(member.userId))}
-            >
+            <SwipeRow key={member.userId} onSwipe={(reset) => onRemoveMember(member, reset)}>
               <div className="item">
                 <span className="tile">{member.name.slice(0, 1).toUpperCase()}</span>
                 <span className="grow">
                   <span className="title">{member.name}</span>
-                  <span className="sub">участник · смахни влево, чтобы убрать</span>
+                  <span className="sub">участник · смахни влево</span>
                 </span>
               </div>
             </SwipeRow>

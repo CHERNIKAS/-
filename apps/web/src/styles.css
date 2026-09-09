@@ -391,3 +391,26 @@ svg {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
+
+/* Подтверждение по центру: смахнутая строка уже уехала, и вопрос должен
+   встать туда, куда смотрит человек. */
+.confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(9, 5, 22, 0.62);
+  backdrop-filter: blur(5px);
+}
+
+.confirm > div {
+  width: 100%;
+  max-width: 340px;
+  padding: 22px;
+  border-radius: 22px;
+  background: #2e1e5e;
+  border: 1px solid var(--edge-2);
+}

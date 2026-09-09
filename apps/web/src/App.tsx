@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Expense, type State } from "./api.js";
+import { moneyExact } from "./format.js";
+import { Confirm } from "./Confirm.js";
 import { ExpenseSheet } from "./ExpenseSheet.js";
 import { Add } from "./screens/Add.js";
 import { Analytics } from "./screens/Analytics.js";
@@ -30,14 +32,13 @@ export function App() {
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared">("settings");
 
-  const removeExpense = useCallback(
-    async (id: number) => {
-      await api.remove(id);
-      notify("success");
-      setState(await api.state());
-    },
-    [],
-  );
+  // Смахнутая строка ждёт подтверждения: reset вернёт её на место при отказе.
+  const [pending, setPending] = useState<{
+    title: string;
+    detail?: string;
+    action: () => Promise<void>;
+    reset: () => void;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -72,7 +73,18 @@ export function App() {
           state={state}
           onExpense={setEditing}
           onCurrency={() => setPickingCurrency(true)}
-          onDelete={removeExpense}
+          onSwipe={(expense, reset) =>
+            setPending({
+              title: "Удалить трату?",
+              detail: `${expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant} · ${moneyExact(expense.amount, expense.currency)}`,
+              action: async () => {
+                await api.remove(expense.id);
+                notify("success");
+                await reload();
+              },
+              reset,
+            })
+          }
         />
       )}
       {tab === "stats" && <Analytics currency={state.user.currency} today={state.today} />}
@@ -82,7 +94,18 @@ export function App() {
           today={state.today}
           currency={state.user.currency}
           onExpense={setEditing}
-          onDelete={removeExpense}
+          onSwipe={(expense, reset) =>
+            setPending({
+              title: "Удалить трату?",
+              detail: `${expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant} · ${moneyExact(expense.amount, expense.currency)}`,
+              action: async () => {
+                await api.remove(expense.id);
+                notify("success");
+                await reload();
+              },
+              reset,
+            })
+          }
         />
       )}
       {tab === "settings" && (
@@ -137,7 +160,23 @@ export function App() {
               onChanged={() => void reload()}
             />
           )}
-          {more === "shared" && <Shared onChanged={() => void reload()} />}
+          {more === "shared" && (
+            <Shared
+              onChanged={() => void reload()}
+              onRemoveMember={(member, reset) =>
+                setPending({
+                  title: "Убрать из общего бюджета?",
+                  detail: member.name,
+                  action: async () => {
+                    await api.removeMember(member.userId);
+                    notify("success");
+                    await reload();
+                  },
+                  reset,
+                })
+              }
+            />
+          )}
         </>
       )}
 
@@ -236,6 +275,21 @@ export function App() {
           onDone={() => {
             setAdding(false);
             void reload();
+          }}
+        />
+      )}
+
+      {pending !== null && (
+        <Confirm
+          title={pending.title}
+          {...(pending.detail === undefined ? {} : { detail: pending.detail })}
+          onConfirm={async () => {
+            await pending.action();
+            setPending(null);
+          }}
+          onCancel={() => {
+            pending.reset();
+            setPending(null);
           }}
         />
       )}

@@ -15,12 +15,12 @@ export function Home({
   state,
   onExpense,
   onCurrency,
-  onDelete,
+  onSwipe,
 }: {
   state: State;
   onExpense: (expense: Expense) => void;
   onCurrency: () => void;
-  onDelete: (id: number) => Promise<void>;
+  onSwipe: (expense: Expense, reset: () => void) => void;
 }) {
   const { user, totals, recent, today } = state;
   const budget = user.monthlyBudget;
@@ -91,7 +91,7 @@ export function Home({
           recent.slice(0, 12).map((expense, index) => {
             const color = categoryColor(expense.category?.slug, state.categories);
             return (
-              <SwipeRow key={expense.id} onDelete={() => onDelete(expense.id)}>
+              <SwipeRow key={expense.id} onSwipe={(reset) => onSwipe(expense, reset)}>
               <button className="item" onClick={() => onExpense(expense)}>
                 <span className="tile" style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}>
                   <CategoryIcon slug={expense.category?.slug} />
