@@ -2,13 +2,16 @@ import { PALETTE, PERIOD_KEYS, PERIOD_TITLE, donutSvg, type PeriodKey } from "@c
 import { useEffect, useState } from "react";
 import { type Analytics as Data, api } from "../api.js";
 import { money, moneyExact } from "../format.js";
+import { CategoryIcon } from "../icons.js";
+import { tint } from "../palette.js";
 import { tap } from "../telegram.js";
 
 /**
- * Аналитика.
+ * Разбор трат.
  *
- * Кольцо рисует та же функция, что готовит картинку для бота: одна реализация
- * диаграммы на обе поверхности, поэтому они не разъезжаются.
+ * Кольцо рисует та же функция, что готовит картинку для бота, но без подложки
+ * и без легенды: подложка дала бы коробку внутри коробки, а легенду заменяет
+ * список под кольцом — там и суммы, и доли.
  */
 export function Analytics({ currency }: { currency: string }) {
   const [period, setPeriod] = useState<PeriodKey>("d30");
@@ -33,16 +36,12 @@ export function Analytics({ currency }: { currency: string }) {
     };
   }, [period]);
 
-  const segments =
-    data?.categories.map((c, i) => ({
-      label: c.title,
-      value: c.total,
-      color: PALETTE[i % PALETTE.length] as string,
-    })) ?? [];
+  const categories = data?.categories ?? [];
+  const total = data?.total ?? 0;
 
   return (
     <>
-      <div className="chips" style={{ marginBottom: 16 }}>
+      <div className="chips" style={{ padding: "10px 0 22px" }}>
         {PERIOD_KEYS.map((key) => (
           <button
             key={key}
@@ -58,63 +57,80 @@ export function Analytics({ currency }: { currency: string }) {
       </div>
 
       {error !== null && <div className="err">{error}</div>}
-
       {data === null && error === null && <p className="spinner">Считаю…</p>}
 
-      {data !== null && (
-        <>
-          {segments.length === 0 ? (
-            <div className="glass" style={{ padding: 24, textAlign: "center" }}>
-              <p className="muted">За этот период трат нет</p>
-            </div>
-          ) : (
-            <div
-              className="glass"
-              style={{ padding: 8, overflow: "hidden" }}
-              // Разметка приходит из общего пакета и собирается здесь же на
-              // клиенте, без сети и без внешних данных.
-              dangerouslySetInnerHTML={{
-                __html: donutSvg(segments, {
-                  total: money(data.total, data.currency),
-                  caption: data.period.label,
-                  legendRows: Math.min(segments.length, 6),
-                  size: 520,
-                }),
-              }}
-            />
-          )}
+      {data !== null && categories.length === 0 && (
+        <div className="card" style={{ padding: 28, textAlign: "center" }}>
+          <p className="muted">За этот период трат нет</p>
+        </div>
+      )}
 
-          <div className="glass list" style={{ padding: "4px 14px", marginTop: 14 }}>
-            {data.categories.map((c, i) => (
-              <div key={c.slug} className="item">
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: PALETTE[i % PALETTE.length],
-                  }}
-                />
-                <span style={{ flex: 1 }}>
-                  {c.emoji} {c.title}
-                </span>
-                <span className="num">{money(c.total, data.currency)}</span>
-              </div>
-            ))}
+      {data !== null && categories.length > 0 && (
+        <>
+          <div
+            style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}
+            dangerouslySetInnerHTML={{
+              __html: donutSvg(
+                categories.map((c, i) => ({
+                  label: c.title,
+                  value: c.total,
+                  color: PALETTE[i % PALETTE.length] as string,
+                })),
+                {
+                  total: money(total, data.currency),
+                  caption: data.period.label,
+                  legendRows: 0,
+                  background: "none",
+                  size: 300,
+                },
+              ),
+            }}
+          />
+
+          <p className="label" style={{ margin: "0 2px 10px" }}>
+            По категориям
+          </p>
+
+          <div className="card rows" style={{ padding: "2px 16px" }}>
+            {categories.map((c, i) => {
+              const color = PALETTE[i % PALETTE.length] as string;
+              const share = total === 0 ? 0 : c.total / total;
+
+              return (
+                <div key={c.slug} className="item">
+                  <span
+                    className="tile"
+                    style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
+                  >
+                    <CategoryIcon slug={c.slug} />
+                  </span>
+                  <span className="grow">
+                    <span className="title">{c.title}</span>
+                    <span className="bar" style={{ marginTop: 7 }}>
+                      <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
+                    </span>
+                  </span>
+                  <span className="amount">
+                    {money(c.total, data.currency)}
+                    <span className="sub" style={{ display: "block" }}>
+                      {Math.round(share * 100)}%
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {data.byCurrency.length > 1 && (
             <>
-              <p className="dim" style={{ margin: "18px 2px 8px" }}>
+              <p className="label" style={{ margin: "22px 2px 10px" }}>
                 Как вносил
               </p>
-              <div className="glass list" style={{ padding: "4px 14px" }}>
+              <div className="card rows" style={{ padding: "2px 16px" }}>
                 {data.byCurrency.map((c) => (
                   <div key={c.currency} className="item">
-                    <span className="num" style={{ flex: 1 }}>
-                      {moneyExact(c.amount, c.currency)}
-                    </span>
-                    <span className="dim num">≈ {money(c.base, currency)}</span>
+                    <span className="grow title num">{moneyExact(c.amount, c.currency)}</span>
+                    <span className="amount dim">≈ {money(c.base, currency)}</span>
                   </div>
                 ))}
               </div>

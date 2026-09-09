@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Category } from "../api.js";
 import { moneyExact } from "../format.js";
+import { IconKeypad, IconText } from "../icons.js";
 import { notify, tap } from "../telegram.js";
 
 /**
@@ -65,7 +66,7 @@ export function Add({
         <div className="grabber" />
 
         <div className="between" style={{ marginBottom: 14 }}>
-          <span className="muted">Новая трата</span>
+          <span className="label">Новая трата</span>
           <span className="pill ghost">{currency}</span>
         </div>
 
@@ -93,7 +94,7 @@ export function Add({
           </>
         ) : (
           <>
-            <p className="amount" style={{ textAlign: "center", margin: "6px 0 14px" }}>
+            <p className="h1" style={{ textAlign: "center", margin: "10px 0 18px" }}>
               {digits === "" ? "0" : digits}
             </p>
 
@@ -107,7 +108,7 @@ export function Add({
                     setSlug(c.slug);
                   }}
                 >
-                  {c.emoji} {c.title}
+                  {c.title}
                 </button>
               ))}
               {!allCategories && categories.length > 5 && (
@@ -142,7 +143,7 @@ export function Add({
               setMode(mode === "text" ? "keys" : "text");
             }}
           >
-            {mode === "text" ? "🔢" : "⌨️"}
+            {mode === "text" ? <IconKeypad /> : <IconText />}
           </button>
           <button className="cta mint" disabled={!canSave || busy} onClick={() => void save()}>
             {busy ? "Сохраняю…" : mode === "keys" && amount > 0 ? `Сохранить ${moneyExact(amount, currency)}` : "Сохранить"}

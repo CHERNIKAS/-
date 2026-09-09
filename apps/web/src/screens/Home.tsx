@@ -1,98 +1,102 @@
 import type { State } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
+import { CategoryIcon } from "../icons.js";
+import { categoryColor, tint } from "../palette.js";
 
 /**
  * Главный экран.
  *
  * Отвечает на два ежедневных вопроса — сколько потрачено и сколько осталось —
- * и показывает свежие траты. Разбивка по категориям живёт в аналитике: она
- * нужна раз в месяц, а лента нужна каждый день.
+ * и показывает свежие траты. Разбивка по категориям живёт в разборе: она нужна
+ * раз в месяц, а лента нужна каждый день.
  */
 export function Home({ state, onExpense }: { state: State; onExpense: (id: number) => void }) {
   const { user, totals, recent, today } = state;
   const budget = user.monthlyBudget;
   const left = budget === null ? null : budget - totals.month;
   const progress = budget === null || budget === 0 ? 0 : Math.min(1, totals.month / budget);
+  const dayOfMonth = Number(today.slice(8, 10));
+  const perDay = totals.month / Math.max(1, dayOfMonth);
 
   return (
     <>
-      <div className="between" style={{ marginBottom: 18 }}>
-        <span className="muted">{monthTitle(today)}</span>
+      <header className="between" style={{ padding: "10px 2px 20px" }}>
+        <p className="label">{monthTitle(today)}</p>
         <span className="pill">{user.currency}</span>
-      </div>
+      </header>
 
-      <p className="dim">Потрачено</p>
-      <p className="amount">{money(totals.month, user.currency)}</p>
+      <p className="label" style={{ marginBottom: 8 }}>
+        Потрачено
+      </p>
+      <p className="h1">{money(totals.month, user.currency)}</p>
 
-      {left === null || budget === null ? (
-        <p className="muted" style={{ marginTop: 8 }}>
-          сегодня {money(totals.day, user.currency)}
-        </p>
-      ) : (
+      {budget !== null && left !== null && (
         <>
-          <p style={{ margin: "10px 0 0" }}>
-            <span
-              className="pill"
-              style={{
-                background: left >= 0 ? "rgba(93,224,180,.14)" : "rgba(255,120,120,.16)",
-                borderColor: left >= 0 ? "rgba(93,224,180,.32)" : "rgba(255,120,120,.32)",
-                color: left >= 0 ? "#5DE0B4" : "#ff9a9a",
-              }}
-            >
-              {left >= 0
-                ? `осталось ${money(left, user.currency)} из ${money(budget, user.currency)}`
-                : `перерасход ${money(-left, user.currency)}`}
-            </span>
-          </p>
-          <div
-            style={{
-              height: 5,
-              borderRadius: 99,
-              background: "rgba(0,0,0,.25)",
-              overflow: "hidden",
-              margin: "14px 0 4px",
-            }}
-          >
-            <div
+          <div className="bar" style={{ margin: "18px 0 10px" }}>
+            <i
               style={{
                 width: `${Math.round(progress * 100)}%`,
-                height: "100%",
-                background: left !== null && left < 0 ? "#ff9a9a" : "#5DE0B4",
+                background: left < 0 ? "var(--rose)" : "var(--mint)",
               }}
             />
           </div>
-          <p className="dim">сегодня {money(totals.day, user.currency)}</p>
+          <p className="dim" style={{ marginBottom: 18 }}>
+            {left >= 0
+              ? `осталось ${money(left, user.currency)} из ${money(budget, user.currency)}`
+              : `перерасход ${money(-left, user.currency)}`}
+          </p>
         </>
       )}
 
-      <div className="glass list" style={{ padding: "4px 14px", marginTop: 20 }}>
+      <div className="stats" style={{ margin: budget === null ? "22px 0 20px" : "0 0 20px" }}>
+        <div className="stat">
+          <span className="dim">Сегодня</span>
+          <b>{money(totals.day, user.currency)}</b>
+        </div>
+        <div className="stat">
+          <span className="dim">В день</span>
+          <b>{money(perDay, user.currency)}</b>
+        </div>
+      </div>
+
+      <p className="label" style={{ margin: "0 2px 10px" }}>
+        Последние траты
+      </p>
+
+      <div className="card rows" style={{ padding: "2px 16px" }}>
         {recent.length === 0 ? (
-          <p className="muted" style={{ padding: "16px 0" }}>
-            Трат пока нет. Добавь первую — кнопкой ниже или сообщением боту.
+          <p className="muted" style={{ padding: "22px 0" }}>
+            Трат пока нет. Добавь первую кнопкой ниже или сообщением боту.
           </p>
         ) : (
-          recent.slice(0, 12).map((expense) => (
-            <button key={expense.id} className="item" onClick={() => onExpense(expense.id)}>
-              <span className="icon">{expense.category?.emoji ?? "📦"}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block" }}>
-                  {expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant}
+          recent.slice(0, 12).map((expense, index) => {
+            const color = categoryColor(expense.category?.slug, state.categories);
+            return (
+              <button key={expense.id} className="item" onClick={() => onExpense(expense.id)}>
+                <span className="tile" style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}>
+                  <CategoryIcon slug={expense.category?.slug} />
                 </span>
-                <span className="dim">
-                  {dayTitle(expense.spentAt, today)}
-                  {expense.category === null ? "" : ` · ${expense.category.title}`}
+                <span className="grow">
+                  <span className="title">
+                    {expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant}
+                  </span>
+                  <span className="sub">
+                    {dayTitle(expense.spentAt, today)}
+                    {expense.category === null ? "" : ` · ${expense.category.title}`}
+                  </span>
                 </span>
-              </span>
-              <span className="num" style={{ textAlign: "right" }}>
-                <span style={{ display: "block" }}>
+                <span className="amount">
                   {moneyExact(expense.amount, expense.currency)}
+                  {expense.currency !== user.currency && (
+                    <span className="sub" style={{ display: "block" }}>
+                      ≈ {money(expense.base, user.currency)}
+                    </span>
+                  )}
                 </span>
-                {expense.currency !== user.currency && (
-                  <span className="dim">≈ {money(expense.base, user.currency)}</span>
-                )}
-              </span>
-            </button>
-          ))
+                <span hidden>{index}</span>
+              </button>
+            );
+          })
         )}
       </div>
     </>

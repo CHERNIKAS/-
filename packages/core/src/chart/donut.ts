@@ -31,6 +31,11 @@ export type DonutOptions = {
   caption: string;
   /** Сколько строк легенды рисовать под кольцом. Ноль — только кольцо. */
   legendRows?: number;
+  /**
+   * Подложка. В чате картинке нужен свой фон, а в приложении она лежит прямо
+   * на градиенте экрана — там подложка дала бы коробку внутри коробки.
+   */
+  background?: "gradient" | "none";
 };
 
 const CX = 50;
@@ -104,6 +109,21 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
 
   const h = height.toFixed(0);
 
+  const background =
+    (options.background ?? "gradient") === "none"
+      ? []
+      : [
+          "<defs>",
+          '<linearGradient id="bg" x1="0" y1="0" x2="0.75" y2="1">',
+          '<stop offset="0" stop-color="#2A1B57"/>',
+          '<stop offset="0.38" stop-color="#4B2E8C"/>',
+          '<stop offset="0.72" stop-color="#1E5F8F"/>',
+          '<stop offset="1" stop-color="#0E7A6B"/>',
+          "</linearGradient>",
+          "</defs>",
+          `<rect fill="url(#bg)" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
+        ];
+
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 ${h}" ` +
       `width="${size}" height="${Math.round((size * height) / 100)}">`,
@@ -112,17 +132,7 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     `.cp{fill:#b9aee0;font-family:${FONT};font-size:5px}`,
     `.lg{fill:#e7e2f7;font-family:${FONT};font-size:6px}`,
     "</style>",
-    "<defs>",
-    // Тот же градиент, что в приложении: картинка в чате и экран аппки должны
-    // выглядеть одной вещью, а не двумя разными.
-    '<linearGradient id="bg" x1="0" y1="0" x2="0.75" y2="1">',
-    '<stop offset="0" stop-color="#2A1B57"/>',
-    '<stop offset="0.38" stop-color="#4B2E8C"/>',
-    '<stop offset="0.72" stop-color="#1E5F8F"/>',
-    '<stop offset="1" stop-color="#0E7A6B"/>',
-    "</linearGradient>",
-    "</defs>",
-    `<rect fill="url(#bg)" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
+    ...background,
     `<circle cx="${CX}" cy="${CY}" r="${RADIUS}" fill="none" stroke="#ffffff22" stroke-width="${STROKE}"/>`,
     ...arcs,
     `<text x="${CX}" y="${CY - 0.5}" text-anchor="middle" class="tt">${escapeXml(options.total)}</text>`,

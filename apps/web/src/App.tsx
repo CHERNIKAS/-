@@ -6,6 +6,7 @@ import { Analytics } from "./screens/Analytics.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
 import { Settings } from "./screens/Settings.js";
+import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
 import { notify, tap } from "./telegram.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
@@ -50,31 +51,35 @@ export function App() {
       {tab === "home" && <Home state={state} onExpense={setEditing} />}
       {tab === "stats" && <Analytics currency={state.user.currency} />}
       {tab === "history" && (
-        <History today={state.today} currency={state.user.currency} onExpense={setEditing} />
+        <History
+          categories={state.categories}
+          today={state.today}
+          currency={state.user.currency}
+          onExpense={setEditing}
+        />
       )}
       {tab === "settings" && <Settings state={state} onChanged={() => void reload()} />}
 
       <nav className="dock">
-        <button
-          className={tab === "home" ? "active" : ""}
-          onClick={() => {
-            tap();
-            setTab("home");
-          }}
-        >
-          <span>🏠</span>
-          Главная
-        </button>
-        <button
-          className={tab === "stats" ? "active" : ""}
-          onClick={() => {
-            tap();
-            setTab("stats");
-          }}
-        >
-          <span>📊</span>
-          Разбор
-        </button>
+        {(
+          [
+            ["home", "Главная", <IconHome key="h" />],
+            ["stats", "Разбор", <IconChart key="c" />],
+          ] as const
+        ).map(([key, title, icon]) => (
+          <button
+            key={key}
+            className={tab === key ? "active" : ""}
+            onClick={() => {
+              tap();
+              setTab(key);
+            }}
+          >
+            {icon}
+            {title}
+          </button>
+        ))}
+
         <button
           className="add"
           onClick={() => {
@@ -82,28 +87,27 @@ export function App() {
             setAdding(true);
           }}
         >
-          <span style={{ fontSize: 18 }}>＋</span>
+          <IconPlus />
         </button>
-        <button
-          className={tab === "history" ? "active" : ""}
-          onClick={() => {
-            tap();
-            setTab("history");
-          }}
-        >
-          <span>🧾</span>
-          История
-        </button>
-        <button
-          className={tab === "settings" ? "active" : ""}
-          onClick={() => {
-            tap();
-            setTab("settings");
-          }}
-        >
-          <span>⚙️</span>
-          Ещё
-        </button>
+
+        {(
+          [
+            ["history", "История", <IconList key="l" />],
+            ["settings", "Ещё", <IconGear key="g" />],
+          ] as const
+        ).map(([key, title, icon]) => (
+          <button
+            key={key}
+            className={tab === key ? "active" : ""}
+            onClick={() => {
+              tap();
+              setTab(key);
+            }}
+          >
+            {icon}
+            {title}
+          </button>
+        ))}
       </nav>
 
       {adding && (
@@ -146,7 +150,7 @@ export function App() {
                       .catch(() => notify("error"));
                   }}
                 >
-                  {c.emoji} {c.title}
+                  {c.title}
                 </button>
               ))}
             </div>

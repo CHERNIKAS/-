@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Expense } from "../api.js";
 import { dayTitle, money, moneyExact, shiftDay } from "../format.js";
+import { CategoryIcon, IconSearch } from "../icons.js";
+import { categoryColor, tint } from "../palette.js";
 
 /**
  * История.
@@ -9,10 +11,12 @@ import { dayTitle, money, moneyExact, shiftDay } from "../format.js";
  * вещи, ради которых не стоит заводить категорию: «подарок Ане», «штатив».
  */
 export function History({
+  categories,
   today,
   currency,
   onExpense,
 }: {
+  categories: { slug: string; title: string; emoji: string }[];
   today: string;
   currency: string;
   onExpense: (id: number) => void;
@@ -65,13 +69,18 @@ export function History({
 
   return (
     <>
-      <input
-        className="field"
-        placeholder="Поиск по тратам"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        style={{ marginBottom: 12 }}
-      />
+      <div style={{ position: "relative", padding: "10px 0 14px" }}>
+        <span style={{ position: "absolute", left: 15, top: 27, color: "var(--ink-3)" }}>
+          <IconSearch />
+        </span>
+        <input
+          className="field"
+          style={{ paddingLeft: 42 }}
+          placeholder="Поиск по тратам"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
 
       <div className="between" style={{ marginBottom: 14 }}>
         <div className="chips">
@@ -100,7 +109,7 @@ export function History({
       {groups.map(([day, list]) => (
         <div key={day} style={{ marginBottom: 16 }}>
           <div className="between" style={{ margin: "0 2px 6px" }}>
-            <span className="dim">{dayTitle(day, today)}</span>
+            <span className="label">{dayTitle(day, today)}</span>
             <span className="dim num">
               {money(
                 list.reduce((sum, e) => sum + e.base, 0),
@@ -109,22 +118,31 @@ export function History({
             </span>
           </div>
 
-          <div className="glass list" style={{ padding: "4px 14px" }}>
+          <div className="card rows" style={{ padding: "2px 16px" }}>
             {list.map((expense) => (
               <button key={expense.id} className="item" onClick={() => onExpense(expense.id)}>
-                <span className="icon">{expense.category?.emoji ?? "📦"}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block" }}>
+                <span
+                  className="tile"
+                  style={{
+                    background: tint(categoryColor(expense.category?.slug, categories)),
+                    color: categoryColor(expense.category?.slug, categories),
+                    borderColor: tint(categoryColor(expense.category?.slug, categories), 0.24),
+                  }}
+                >
+                  <CategoryIcon slug={expense.category?.slug} />
+                </span>
+                <span className="grow">
+                  <span className="title">
                     {expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant}
                   </span>
-                  <span className="dim">{expense.category?.title ?? "без категории"}</span>
+                  <span className="sub">{expense.category?.title ?? "без категории"}</span>
                 </span>
-                <span className="num" style={{ textAlign: "right" }}>
-                  <span style={{ display: "block" }}>
-                    {moneyExact(expense.amount, expense.currency)}
-                  </span>
+                <span className="amount">
+                  {moneyExact(expense.amount, expense.currency)}
                   {expense.currency !== currency && (
-                    <span className="dim">≈ {money(expense.base, currency)}</span>
+                    <span className="sub" style={{ display: "block" }}>
+                      ≈ {money(expense.base, currency)}
+                    </span>
                   )}
                 </span>
               </button>
