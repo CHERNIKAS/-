@@ -40,7 +40,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export function donutSvg(segments: Segment[], options: DonutOptions): string {
   const size = options.size ?? 420;
   const legendRows = options.legendRows ?? Math.min(segments.length, 6);
-  const legendHeight = legendRows * 15 + (legendRows > 0 ? 10 : 0);
+  const legendHeight = legendRows * 12 + (legendRows > 0 ? 8 : 0);
   const height = 100 + legendHeight;
 
   const total = segments.reduce((sum, s) => sum + s.value, 0);
@@ -63,13 +63,14 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     offsetDeg += share * 360;
   }
 
+  // В легенде только названия: проценты и суммы уже есть в подписи под
+  // картинкой, а вдвоём в одной строке они наезжают на длинных названиях.
   const legend = segments.slice(0, legendRows).map((s, i) => {
-    const y = 108 + i * 15;
-    const percent = total > 0 ? Math.round((s.value / total) * 100) : 0;
+    const y = 106 + i * 12;
+    const label = s.label.length > 20 ? `${s.label.slice(0, 19)}…` : s.label;
     return (
-      `<rect x="4" y="${y - 7}" width="8" height="8" rx="2" fill="${s.color}"/>` +
-      `<text x="17" y="${y}" class="lg">${escapeXml(s.label)}</text>` +
-      `<text x="96" y="${y}" class="lg rt" text-anchor="end">${percent}%</text>`
+      `<rect x="16" y="${y - 6}" width="7" height="7" rx="2" fill="${s.color}"/>` +
+      `<text x="27" y="${y}" class="lg">${escapeXml(label)}</text>`
     );
   });
 
@@ -77,9 +78,9 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 ${height}" width="${size}" height="${Math.round((size * height) / 100)}">`,
     "<style>",
     ".bg{fill:#2A1B57}",
-    ".tt{fill:#ffffff;font:600 15px system-ui,sans-serif}",
-    ".cp{fill:#b9aee0;font:400 7px system-ui,sans-serif}",
-    ".lg{fill:#e7e2f7;font:400 8px system-ui,sans-serif}",
+    ".tt{fill:#ffffff;font:600 14px system-ui,sans-serif}",
+    ".cp{fill:#b9aee0;font:400 6px system-ui,sans-serif}",
+    ".lg{fill:#e7e2f7;font:400 6px system-ui,sans-serif}",
     ".rt{fill:#b9aee0}",
     "</style>",
     `<rect class="bg" x="0" y="0" width="100" height="${height}"/>`,
