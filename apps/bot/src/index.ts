@@ -1,12 +1,16 @@
 import type { Currency } from "@costnote/core";
-import { Bot, type CommandContext, type Context } from "grammy";
+import { Bot, type CommandContext, type Context, InlineKeyboard } from "grammy";
 import { env } from "./env.js";
 import { moneyShort } from "./format.js";
 import { sendAnalytics, switchPeriod } from "./handlers/analytics.js";
+import { handleSettingsCallback, settingsKeyboard, settingsText } from "./handlers/settings.js";
 import { handleCallback } from "./handlers/callbacks.js";
 import { handleExpenseMessage } from "./handlers/expense.js";
 import { mainKeyboard } from "./keyboards.js";
+import { refreshPanel } from "./panel.js";
 import { PERIOD_KEYS, type PeriodKey } from "./periods.js";
+import { createCategoryFromSuggestion } from "./repo/suggestions.js";
+import { startScheduler } from "./scheduler.js";
 import { listCategories, totalSince } from "./repo/expenses.js";
 import { rateToUsd, refreshRates, today } from "./repo/rates.js";
 import { ensureUser } from "./repo/users.js";
@@ -19,7 +23,7 @@ bot.catch((err) => {
 
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
-  await ensureUser(ctx.from);
+  const { user, ledgerId } = await ensureUser(ctx.from);
 
   await ctx.reply(
     [
@@ -33,6 +37,8 @@ bot.command("start", async (ctx) => {
     ].join("\n"),
     { parse_mode: "HTML", reply_markup: mainKeyboard },
   );
+
+  await refreshPanel(ctx.api, user, ledgerId, String(ctx.chat.id)).catch(() => undefined);
 });
 
 bot.command("help", async (ctx) => {
@@ -70,6 +76,15 @@ async function summary(ctx: CommandContext<Context>, fromDay: string, label: str
 bot.command("day", (ctx) => summary(ctx, today(), "Сегодня"));
 bot.command("month", (ctx) => summary(ctx, `${today().slice(0, 7)}-01`, "За месяц"));
 
+bot.command("settings", async (ctx) => {
+  if (!ctx.from) return;
+  const { user } = await ensureUser(ctx.from);
+  await ctx.reply(settingsText(user), {
+    parse_mode: "HTML",
+    reply_markup: settingsKeyboard(user),
+  });
+});
+
 bot.hears("Помощь", (ctx) => ctx.reply("Напиши /help — там примеры."));
 
 bot.hears("Категории", async (ctx) => {
@@ -93,6 +108,49 @@ bot.on("callback_query:data", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
   const data = ctx.callbackQuery.data;
+
+  if (await handleSettingsCallback(ctx, user)) return;
+
+  // Вечернее напоминание: «день без трат» подтверждается отдельным шагом,
+  // чтобы случайный тап не закрыл день.
+  if (data.startsWith("z:")) {
+    const [, action, day] = data.split(":");
+
+    if (action === "ask") {
+      await ctx.editMessageText(`Записать ${day} как день без трат?`, {
+        reply_markup: new InlineKeyboard()
+          .text("Подтвердить", `z:yes:${day}`)
+          .text("Отмена", "z:no"),
+      });
+    } else if (action === "yes") {
+      await ctx.editMessageText("<i>Записано: день без трат</i>", { parse_mode: "HTML" });
+    } else {
+      await ctx.editMessageText("<i>Хорошо, жду трату</i>", { parse_mode: "HTML" });
+    }
+
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
+  if (data.startsWith("g:")) {
+    const [, action, raw] = data.split(":");
+
+    if (action === "add" && raw) {
+      const merchant = decodeURIComponent(raw);
+      const created = await createCategoryFromSuggestion(ledgerId, user.id, merchant);
+      await ctx.editMessageText(
+        created
+          ? `<i>Категория «${created.title}» заведена, траты перенесены</i>`
+          : "<i>Не получилось завести категорию</i>",
+        { parse_mode: "HTML" },
+      );
+    } else {
+      await ctx.editMessageText("<i>Хорошо, оставляю как есть</i>", { parse_mode: "HTML" });
+    }
+
+    await ctx.answerCallbackQuery();
+    return;
+  }
 
   if (data.startsWith("a:")) {
     const key = data.slice(2) as PeriodKey;
@@ -119,6 +177,7 @@ async function main() {
     { command: "day", description: "Сколько сегодня" },
     { command: "month", description: "Сколько за месяц" },
     { command: "help", description: "Как писать траты" },
+    { command: "settings", description: "Настройки" },
   ]);
 
   // Курсы нужны для первой же траты в чужой валюте — тянем на старте, а не
@@ -128,6 +187,8 @@ async function main() {
   } catch (error) {
     console.error("курсы не обновились:", error);
   }
+
+  startScheduler(bot);
 
   console.log("бот запущен");
   await bot.start();

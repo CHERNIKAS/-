@@ -39,6 +39,14 @@ const RADIUS = 29;
 const STROKE = 10;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const LEGEND_STEP = 11;
+const SWATCH = 6;
+const SWATCH_GAP = 4;
+/** Средняя ширина символа при font-size 6 — хватает, чтобы центровать блок. */
+const CHAR_WIDTH = 3.15;
+
+function estimateWidth(label: string): number {
+  return label.length * CHAR_WIDTH;
+}
 
 /**
  * Шрифт задаётся явным семейством, а не системным по умолчанию: рендер идёт в
@@ -50,8 +58,8 @@ const FONT = "'Noto Sans','DejaVu Sans',sans-serif";
 export function donutSvg(segments: Segment[], options: DonutOptions): string {
   const visible = segments.filter((s) => s.value > 0);
   const legendRows = Math.min(options.legendRows ?? visible.length, visible.length, 8);
-  const legendTop = CY + RADIUS + 16;
-  const height = legendRows > 0 ? legendTop + legendRows * LEGEND_STEP : CY + RADIUS + 10;
+  const legendTop = CY + RADIUS + 15;
+  const height = legendRows > 0 ? legendTop + (legendRows - 1) * LEGEND_STEP + 8 : CY + RADIUS + 11;
   const size = options.size ?? 1040;
 
   const total = visible.reduce((sum, s) => sum + s.value, 0);
@@ -75,12 +83,22 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
 
   // В легенде только названия: точные суммы есть в подписи под картинкой, а
   // вдвоём в одной строке они наезжают друг на друга на длинных названиях.
-  const legend = visible.slice(0, legendRows).map((s, i) => {
+  const labels = visible
+    .slice(0, legendRows)
+    .map((s) => (s.label.length > 22 ? `${s.label.slice(0, 21)}…` : s.label));
+
+  // Ширина самой длинной строки задаёт ширину блока, и блок центруется
+  // целиком: иначе кольцо стоит по центру, а подписи прижаты к левому краю,
+  // и вся картинка выглядит перекошенной.
+  const widest = labels.reduce((max, l) => Math.max(max, estimateWidth(l)), 0);
+  const blockWidth = SWATCH + SWATCH_GAP + widest;
+  const blockLeft = CX - blockWidth / 2;
+
+  const legend = labels.map((label, i) => {
     const y = legendTop + i * LEGEND_STEP;
-    const label = s.label.length > 22 ? `${s.label.slice(0, 21)}…` : s.label;
     return (
-      `<rect x="14" y="${(y - 4.6).toFixed(1)}" width="6" height="6" rx="1.8" fill="${s.color}"/>` +
-      `<text x="24" y="${y}" class="lg">${escapeXml(label)}</text>`
+      `<rect x="${blockLeft.toFixed(1)}" y="${(y - 4.6).toFixed(1)}" width="${SWATCH}" height="${SWATCH}" rx="1.8" fill="${visible[i]?.color ?? "#ffffff"}"/>` +
+      `<text x="${(blockLeft + SWATCH + SWATCH_GAP).toFixed(1)}" y="${y}" class="lg">${escapeXml(label)}</text>`
     );
   });
 
@@ -107,8 +125,8 @@ export function donutSvg(segments: Segment[], options: DonutOptions): string {
     `<rect fill="url(#bg)" x="-2" y="-2" width="104" height="${Number(h) + 4}"/>`,
     `<circle cx="${CX}" cy="${CY}" r="${RADIUS}" fill="none" stroke="#ffffff22" stroke-width="${STROKE}"/>`,
     ...arcs,
-    `<text x="${CX}" y="${CY + 2}" text-anchor="middle" class="tt">${escapeXml(options.total)}</text>`,
-    `<text x="${CX}" y="${CY + 10}" text-anchor="middle" class="cp">${escapeXml(options.caption)}</text>`,
+    `<text x="${CX}" y="${CY - 0.5}" text-anchor="middle" class="tt">${escapeXml(options.total)}</text>`,
+    `<text x="${CX}" y="${CY + 7.5}" text-anchor="middle" class="cp">${escapeXml(options.caption)}</text>`,
     ...legend,
     "</svg>",
   ].join("");

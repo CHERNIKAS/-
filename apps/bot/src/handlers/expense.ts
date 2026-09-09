@@ -10,6 +10,7 @@ import {
   listCategories,
   totalSince,
 } from "../repo/expenses.js";
+import { refreshPanel } from "../panel.js";
 import { rateToUsd, today } from "../repo/rates.js";
 import { recentCorrections, userRules } from "../repo/rules.js";
 import type { AppUser } from "../repo/users.js";
@@ -136,6 +137,9 @@ export async function handleExpenseMessage(
       expenseId: expense.id,
     });
   }
+
+  // Панель показывает итог дня, а он только что изменился.
+  await refreshPanel(ctx.api, user, ledgerId, chatId).catch(() => undefined);
 }
 
 /**

@@ -39,6 +39,11 @@ export const users = pgTable(
     partnerNotifications: boolean("partner_notifications").notNull().default(true),
 
     monthlyBudget: numeric("monthly_budget", { precision: 14, scale: 2 }),
+
+    /** День последнего вечернего напоминания — чтобы не слать его дважды. */
+    lastReminderDay: date("last_reminder_day"),
+    /** День последнего предложения по категориям: они приходят раз в неделю. */
+    lastSuggestionDay: date("last_suggestion_day"),
     defaultPayment: paymentEnum("default_payment").notNull().default("card"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
