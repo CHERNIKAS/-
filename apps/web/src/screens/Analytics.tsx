@@ -67,6 +67,15 @@ export function Analytics({
       ? categories.map((c) => ({ label: c.title, value: c.total }))
       : currencies.map((c) => ({ label: c.currency, value: c.base }));
 
+  /**
+   * Кольцо занимает место, которое осталось от списка.
+   *
+   * Две категории — под списком полэкрана пустоты, и маленькое кольцо посреди
+   * неё выглядит забытым. Десять — наоборот, важен список, и кольцу хватает
+   * скромного размера, чтобы всё влезло без прокрутки.
+   */
+  const donutSize = slices.length <= 3 ? 264 : slices.length <= 5 ? 232 : 200;
+
   return (
     <>
       <div style={{ padding: "12px 0 16px" }}>
@@ -126,7 +135,7 @@ export function Analytics({
                   caption: rangeTitle(range),
                   legendRows: 0,
                   background: "none",
-                  size: 200,
+                  size: donutSize,
                 },
               ),
             }}
