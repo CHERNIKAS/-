@@ -18,6 +18,7 @@ export function Home({
   onExpense,
   onCurrency,
   onReview,
+  onBook,
   onSwipe,
 }: {
   state: State;
@@ -25,6 +26,8 @@ export function Home({
   onCurrency: () => void;
   /** Переход к разбору приходов и переводов. */
   onReview: () => void;
+  /** Смена книги: личная, общая или книга дела. */
+  onBook: () => void;
   onSwipe: (expense: Expense, reset: () => void) => void;
 }) {
   const { user, totals, recent, today } = state;
@@ -47,14 +50,28 @@ export function Home({
   const currencies = state.currencies.filter((c) => c.base > 0);
   const currencyTotal = currencies.reduce((sum, c) => sum + c.base, 0);
   const perDay = totals.month / Math.max(1, dayOfMonth);
+  const business = state.book.kind === "business";
+  const profit = totals.income - totals.month;
 
   return (
     <>
       <header className="between" style={{ padding: "10px 2px 20px" }}>
-        <p className="label">
+        {/* Название книги — кнопка: переключение отсюда, а не из настроек,
+            потому что это первое, на что смотрит глаз при открытии. */}
+        <button
+          className="label"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          onClick={() => {
+            tap();
+            onBook();
+          }}
+        >
           {monthTitle(today)}
-          {state.sharedActive ? " · общий бюджет" : ""}
-        </p>
+          {state.book.kind === "personal" ? "" : ` · ${state.book.title}`}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
         <button className="pill" onClick={onCurrency}>
           {user.currency}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -63,10 +80,12 @@ export function Home({
         </button>
       </header>
 
+      {/* У дела главный вопрос другой: не «сколько потратил», а «сколько
+          заработал». Те же цифры, но первым стоит оборот. */}
       <p className="label" style={{ marginBottom: 8 }}>
-        Потрачено
+        {business ? "Оборот" : "Потрачено"}
       </p>
-      <p className="h1">{money(totals.month, user.currency)}</p>
+      <p className="h1">{money(business ? totals.income : totals.month, user.currency)}</p>
 
       {currencies.length > 1 && currencyTotal > 0 && (
         <div style={{ margin: "16px 0 0" }}>
@@ -123,24 +142,45 @@ export function Home({
       )}
 
       <div className="stats" style={{ margin: budget === null ? "22px 0 20px" : "0 0 20px" }}>
-        <div className="stat">
-          <span className="dim">Сегодня</span>
-          <b>{money(totals.day, user.currency)}</b>
-        </div>
-        <div className="stat">
-          <span className="dim">В день</span>
-          <b>{money(perDay, user.currency)}</b>
-        </div>
+        {business ? (
+          <>
+            <div className="stat">
+              <span className="dim">Расходы</span>
+              <b>{money(totals.month, user.currency)}</b>
+            </div>
+            <div className="stat">
+              <span className="dim">Прибыль</span>
+              <b style={{ color: profit < 0 ? "var(--rose)" : "var(--mint)" }}>
+                {money(profit, user.currency)}
+              </b>
+            </div>
+            <div className="stat">
+              <span className="dim">Сегодня</span>
+              <b>{money(totals.day, user.currency)}</b>
+            </div>
+          </>
+        ) : (
+          <div className="stat">
+            <span className="dim">Сегодня</span>
+            <b>{money(totals.day, user.currency)}</b>
+          </div>
+        )}
+        {!business && (
+          <div className="stat">
+            <span className="dim">В день</span>
+            <b>{money(perDay, user.currency)}</b>
+          </div>
+        )}
         {/* Доход показывается только когда он есть: пустая строка «0» на
             главной у того, кто ведёт одни расходы, — лишний шум. */}
-        {totals.income > 0 && (
+        {totals.income > 0 && !business && (
           <div className="stat">
             <span className="dim">Доход</span>
             <b style={{ color: "var(--mint)" }}>+{money(totals.income, user.currency)}</b>
           </div>
         )}
 
-        {hasLeft && (
+        {hasLeft && !business && (
           <div className="stat">
             <span className="dim">{budget === null ? "Остаток" : "Осталось"}</span>
             <b style={{ color: left < 0 ? "var(--rose)" : undefined }}>

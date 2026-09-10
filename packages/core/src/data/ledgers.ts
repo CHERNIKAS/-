@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { CATEGORY_SEED } from "../categories.js";
+import { BUSINESS_SEED, CATEGORY_SEED } from "../categories.js";
 import { db, schema } from "./db.js";
 import type { AppUser } from "./users.js";
 
@@ -13,6 +13,9 @@ import type { AppUser } from "./users.js";
  */
 
 export type Ledger = typeof schema.ledgers.$inferSelect;
+
+/** Сколько книг можно завести: больше — это уже не учёт, а картотека. */
+export const MAX_LEDGERS = 8;
 
 export async function personalLedger(userId: number): Promise<Ledger | undefined> {
   return db.query.ledgers.findFirst({
@@ -73,25 +76,45 @@ export async function membersOf(ledgerId: number): Promise<Member[]> {
 
 /** Общая книга со своим набором категорий — теми же, что и у личной. */
 export async function createSharedLedger(user: AppUser, title = "Общий бюджет"): Promise<Ledger> {
+  return createLedger(user, title, "shared");
+}
+
+/**
+ * Заведение книги.
+ *
+ * Бизнес — такая же книга, как личная: свои категории, свои траты, свой разрез.
+ * Отдельной сущности для него нет намеренно — иначе половину приложения
+ * пришлось бы писать заново ради того же самого.
+ */
+export async function createLedger(
+  user: AppUser,
+  title: string,
+  kind: "shared" | "business",
+): Promise<Ledger> {
   return db.transaction(async (tx) => {
     const [ledger] = await tx
       .insert(schema.ledgers)
       .values({
-        title,
+        title: title.slice(0, 128),
         ownerId: user.id,
-        isShared: true,
+        isShared: kind === "shared",
+        kind,
+        // Приглашать в бизнес-книгу тоже можно: бухгалтер или партнёр.
         inviteToken: randomBytes(12).toString("base64url"),
       })
       .returning();
 
-    if (!ledger) throw new Error("не удалось создать общую книгу");
+    if (!ledger) throw new Error("не удалось создать книгу");
 
     await tx
       .insert(schema.ledgerMembers)
       .values({ ledgerId: ledger.id, userId: user.id, role: "owner" });
 
+    // У бизнеса свой набор: закупка и аренда вместо кафе и развлечений.
+    const seed = kind === "business" ? BUSINESS_SEED : CATEGORY_SEED;
+
     await tx.insert(schema.categories).values(
-      CATEGORY_SEED.map((c, i) => ({
+      seed.map((c, i) => ({
         ledgerId: ledger.id,
         slug: c.slug,
         title: c.title,

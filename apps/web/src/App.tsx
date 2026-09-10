@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Expense, type State } from "./api.js";
 import { moneyExact } from "./format.js";
+import { BookPicker } from "./BookPicker.js";
 import { Confirm } from "./Confirm.js";
 import { ExpenseSheet } from "./ExpenseSheet.js";
 import { Add } from "./screens/Add.js";
@@ -34,6 +35,7 @@ export function App() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
+  const [pickingBook, setPickingBook] = useState(false);
   const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared" | "review">(
     "settings",
   );
@@ -119,6 +121,7 @@ export function App() {
             setMore("review");
             setTab("settings");
           }}
+          onBook={() => setPickingBook(true)}
           onExpense={setEditing}
           onCurrency={() => setPickingCurrency(true)}
           onSwipe={(expense, reset) =>
@@ -282,6 +285,16 @@ export function App() {
           </button>
         ))}
       </nav>
+
+      {pickingBook && (
+        <BookPicker
+          onClose={() => setPickingBook(false)}
+          onDone={() => {
+            setPickingBook(false);
+            void reload();
+          }}
+        />
+      )}
 
       {pickingCurrency && (
         <div className="sheet short" onClick={closeCurrency}>

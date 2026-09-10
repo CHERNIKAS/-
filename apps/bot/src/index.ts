@@ -98,6 +98,35 @@ bot.command("start", async (ctx) => {
   }
 });
 
+/**
+ * Книги: личная, общая и книги дел.
+ *
+ * Переключатель один на бота и приложение: сменил здесь — сменилось и там.
+ * Иначе получается ловушка, где пишешь в одну книгу, а смотришь другую.
+ */
+bot.command("book", async (ctx) => {
+  if (!ctx.from) return;
+  const { user, ledgerId } = await ensureUser(ctx.from);
+  const books = await ledgersOf(user.id);
+
+  const kb = new InlineKeyboard();
+  for (const book of books) {
+    const title = book.kind === "personal" ? "Личное" : book.title;
+    kb.text(`${book.id === ledgerId ? "· " : ""}${title}`, `b:${book.id}`).row();
+  }
+
+  await ctx.reply(
+    [
+      "<b>Куда пишем траты</b>",
+      "",
+      "<i>Книга — отдельный мир: пока открыта одна, других не видно.</i>",
+      "<i>Разовая запись мимо переключателя — с двоеточием:</i>",
+      "<code>чай: закупка 5000</code>",
+    ].join(NL),
+    { parse_mode: "HTML", reply_markup: kb },
+  );
+});
+
 bot.command("invite", async (ctx) => {
   if (!ctx.from) return;
   const { user } = await ensureUser(ctx.from);
@@ -146,6 +175,12 @@ bot.command("help", async (ctx) => {
       "Доходы не попадают в «Потрачено» и в кольцо категорий.",
       "",
       "Выписку из банка можно просто прислать файлом — CSV, XLSX или PDF.",
+      "",
+      "<b>Книги</b>",
+      "",
+      "Личные траты и дело живут в разных книгах и не смешиваются.",
+      "/book — переключить, <code>чай: закупка 5000</code> — записать разово,",
+      "не переключаясь.",
       "",
       "<b>Команды</b>",
       "/day — сколько потрачено сегодня",
@@ -211,6 +246,26 @@ bot.on("callback_query:data", async (ctx) => {
       await ctx.editMessageText("<i>Хорошо, жду трату</i>", { parse_mode: "HTML" });
     }
 
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
+  if (data.startsWith("b:")) {
+    const id = Number(data.slice(2));
+    const books = await ledgersOf(user.id);
+    const target = books.find((b) => b.id === id);
+
+    if (target === undefined) {
+      await ctx.answerCallbackQuery("Такой книги нет");
+      return;
+    }
+
+    // Личная книга хранится как «пусто» — так было с самого начала.
+    const personal = books.find((b) => b.kind === "personal" && b.ownerId === user.id);
+    await updateUser(user.id, { activeLedgerId: target.id === personal?.id ? null : target.id });
+
+    const title = target.kind === "personal" ? "Личное" : target.title;
+    await ctx.editMessageText(`<b>Пишу в «${title}»</b>`, { parse_mode: "HTML" });
     await ctx.answerCallbackQuery();
     return;
   }
@@ -305,6 +360,7 @@ async function main() {
     { command: "day", description: "Сколько сегодня" },
     { command: "month", description: "Сколько за месяц" },
     { command: "help", description: "Как писать траты" },
+    { command: "book", description: "Куда пишем: личное или дело" },
     { command: "invite", description: "Общий бюджет" },
     { command: "settings", description: "Настройки" },
   ]);

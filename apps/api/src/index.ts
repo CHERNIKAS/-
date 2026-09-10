@@ -27,7 +27,9 @@ import {
   db,
   activeLedgerId,
   createRecurring,
+  createLedger,
   createSharedLedger,
+  MAX_LEDGERS,
   deleteRecurring,
   ensureUser,
   expenseById,
@@ -178,6 +180,9 @@ app.get("/api/state", async (request) => {
     label: "месяц",
   };
 
+  const books = await ledgersOf(user.id);
+  const book = books.find((b) => b.id === ledgerId);
+
   const [categories, dayUsd, monthUsd, monthIncome, currencies] = await Promise.all([
     listCategories(ledgerId),
     totalSince(ledgerId, todayDay),
@@ -222,6 +227,12 @@ app.get("/api/state", async (request) => {
     },
     today: todayDay,
     sharedActive: user.activeLedgerId !== null,
+    /** Книга, в которую сейчас пишется и по которой всё показано. */
+    book: {
+      id: ledgerId,
+      title: book === undefined || book.kind === "personal" ? "Личное" : book.title,
+      kind: book?.kind ?? "personal",
+    },
     totals: { day: dayUsd / rate, month: monthUsd / rate, income: monthIncome / rate },
     needsReview: Number(pending?.count ?? 0),
     currencies: currencies.map((c) => ({
@@ -749,6 +760,76 @@ app.patch("/api/review", async (request) => {
       })
       .where(and(eq(schema.expenses.id, decision.id), eq(schema.expenses.ledgerId, ledgerId)));
   }
+
+  return { ok: true };
+});
+
+/**
+ * Книги: личная, общая и книги дел.
+ *
+ * Бизнес не отдельная сущность, а такая же книга: свои категории, свои траты,
+ * свой разрез. Переключатель один на бота и приложение — иначе получилась бы
+ * ловушка, где в чате пишешь в одно, а смотришь другое.
+ */
+app.get("/api/books", async (request) => {
+  const { user } = request;
+  const books = await ledgersOf(user.id);
+  const personal = books.find((b) => b.kind === "personal" && b.ownerId === user.id);
+  const activeId = user.activeLedgerId ?? personal?.id ?? null;
+
+  return {
+    limit: MAX_LEDGERS,
+    books: books
+      .sort((a, b) => (a.kind === "personal" ? -1 : b.kind === "personal" ? 1 : a.id - b.id))
+      .map((b) => ({
+        id: b.id,
+        title: b.kind === "personal" ? "Личное" : b.title,
+        kind: b.kind,
+        active: b.id === activeId,
+      })),
+  };
+});
+
+const bookSchema = z.object({
+  title: z.string().min(1).max(64),
+  kind: z.enum(["shared", "business"]).default("business"),
+});
+
+app.post("/api/books", async (request, reply) => {
+  const { user } = request;
+  const body = bookSchema.parse(request.body);
+
+  const books = await ledgersOf(user.id);
+  if (books.length >= MAX_LEDGERS) {
+    await reply.code(400).send({ error: `Больше ${MAX_LEDGERS} книг — это уже картотека` });
+    return;
+  }
+
+  const created = await createLedger(user, body.title, body.kind);
+  await updateUser(user.id, { activeLedgerId: created.id });
+
+  return { id: created.id };
+});
+
+/** Переключение книги: пишем и смотрим всегда одну и ту же. */
+app.post("/api/books/active", async (request, reply) => {
+  const { user } = request;
+  const { id } = z.object({ id: z.number().int() }).parse(request.body);
+
+  const books = await ledgersOf(user.id);
+  const target = books.find((b) => b.id === id);
+
+  if (target === undefined) {
+    await reply.code(404).send({ error: "такой книги нет" });
+    return;
+  }
+
+  // Личная книга хранится как «пусто»: так было с самого начала, и менять это
+  // ради красоты значит трогать каждую строку, где она подставляется.
+  const personal = books.find((b) => b.kind === "personal" && b.ownerId === user.id);
+  await updateUser(user.id, {
+    activeLedgerId: target.id === personal?.id ? null : target.id,
+  });
 
   return { ok: true };
 });

@@ -18,6 +18,15 @@ export const currencyEnum = pgEnum("currency", ["USD", "EUR", "UAH", "TRY"]);
 export const sourceEnum = pgEnum("source", ["bot", "app"]);
 export const paymentEnum = pgEnum("payment", ["card", "cash", "transfer"]);
 export const memberRoleEnum = pgEnum("member_role", ["owner", "member"]);
+
+/**
+ * Назначение книги.
+ *
+ * Личная и общая отличаются только числом участников, а бизнес — вопросом, на
+ * который отвечает главный экран: там важно «сколько заработал», а не «сколько
+ * осталось». Поэтому вид книги, а не флаг «общая».
+ */
+export const ledgerKindEnum = pgEnum("ledger_kind", ["personal", "shared", "business"]);
 /**
  * Вид операции.
  *
@@ -89,6 +98,7 @@ export const ledgers = pgTable("ledgers", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   title: varchar({ length: 128 }).notNull(),
   isShared: boolean("is_shared").notNull().default(false),
+  kind: ledgerKindEnum().notNull().default("personal"),
   ownerId: integer("owner_id")
     .notNull()
     .references(() => users.id),

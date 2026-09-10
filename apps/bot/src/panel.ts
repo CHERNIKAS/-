@@ -2,9 +2,9 @@ import type { Currency } from "@costnote/core";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Api } from "grammy";
 import { db, schema } from "@costnote/core/data";
-import { moneyShort } from "./format.js";
+import { escapeHtml, moneyShort } from "./format.js";
 import { totalSince } from "@costnote/core/data";
-import { rateToUsd, today } from "@costnote/core/data";
+import { ledgersOf, rateToUsd, today } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
 /**
@@ -28,6 +28,14 @@ async function panelText(user: AppUser, ledgerId: number): Promise<string> {
     `<b>Сегодня</b>  <code>${moneyShort(dayUsd / rate, base)}</code>`,
     `<i>месяц</i>  <code>${moneyShort(monthUsd / rate, base)}</code>`,
   ];
+
+  // Какая книга открыта — самое важное в панели: без этого закупка для дела
+  // тихо ляжет в личные траты, и заметишь ты это через месяц.
+  const books = await ledgersOf(user.id);
+  const book = books.find((b) => b.id === ledgerId);
+  if (book !== undefined && book.kind !== "personal") {
+    lines.push(`<i>книга</i>  <b>${escapeHtml(book.title)}</b>`);
+  }
 
   if (user.monthlyBudget !== null) {
     const budget = Number(user.monthlyBudget);

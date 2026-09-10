@@ -9,6 +9,7 @@ import {
   categoryBySlug,
   applyRefund,
   createExpense,
+  ledgersOf,
   findRefundTarget,
   listCategories,
   softDelete,
@@ -47,7 +48,10 @@ export async function handleExpenseMessage(
   // вторую трату: ключ (chat_id, message_id) уже занят — значит, обработано.
   if (inserted.length === 0) return;
 
-  const entries = parseMessage(text);
+  // Разовая запись в другую книгу: «чай: закупка 5000». Переключаться туда и
+  // обратно ради одной строки — лишние два действия каждый день.
+  const routed = await routeByPrefix(user, text, ledgerId);
+  const entries = parseMessage(routed.text);
   const parsed = entries.filter((e) => e.ok);
 
   if (parsed.length === 0) {
@@ -64,7 +68,36 @@ export async function handleExpenseMessage(
   }
 
   await deleteUserMessage(ctx);
-  await saveExpenses(ctx, user, ledgerId, chatId, text);
+  await saveExpenses(ctx, user, routed.ledgerId, chatId, routed.text);
+}
+
+/**
+ * Книга по префиксу перед двоеточием.
+ *
+ * Совпадение по началу названия: «чай:» находит «Чайный магазин». Не нашлось —
+ * строка остаётся как есть, вместе с двоеточием: в тексте траты оно
+ * встречается и само по себе.
+ */
+async function routeByPrefix(
+  user: AppUser,
+  text: string,
+  fallbackId: number,
+): Promise<{ text: string; ledgerId: number }> {
+  const at = text.indexOf(":");
+  if (at < 1 || at > 24) return { text, ledgerId: fallbackId };
+
+  const prefix = text.slice(0, at).trim().toLowerCase();
+  if (prefix === "") return { text, ledgerId: fallbackId };
+
+  const books = await ledgersOf(user.id);
+  const target = books.find((b) => {
+    const title = (b.kind === "personal" ? "Личное" : b.title).toLowerCase();
+    return title.startsWith(prefix);
+  });
+
+  if (target === undefined) return { text, ledgerId: fallbackId };
+
+  return { text: text.slice(at + 1).trim(), ledgerId: target.id };
 }
 
 /**

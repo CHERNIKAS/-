@@ -60,6 +60,8 @@ export type State = {
   };
   today: string;
   sharedActive: boolean;
+  /** Книга, в которую сейчас пишется: личная, общая или книга дела. */
+  book: { id: number; title: string; kind: "personal" | "shared" | "business" };
   totals: { day: number; month: number; income: number };
   /** Сколько приходов и переводов ждут ответа «доход или свои деньги». */
   needsReview: number;
@@ -226,6 +228,17 @@ export const api = {
   deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
 
   /** Эмодзи не передаём: сервер подбирает его по названию той же таблицей, что и значок. */
+  books: () =>
+    request<{ limit: number; books: { id: number; title: string; kind: string; active: boolean }[] }>(
+      "/books",
+    ),
+
+  createBook: (title: string, kind: "shared" | "business" = "business") =>
+    request<{ id: number }>("/books", { method: "POST", body: JSON.stringify({ title, kind }) }),
+
+  switchBook: (id: number) =>
+    request<{ ok: true }>("/books/active", { method: "POST", body: JSON.stringify({ id }) }),
+
   review: () => request<{ total: number; groups: ReviewGroup[] }>("/review"),
 
   saveReview: (decisions: { id: number; kind: string }[]) =>
