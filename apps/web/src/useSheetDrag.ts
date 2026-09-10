@@ -108,16 +108,49 @@ export function useSheetDrag(onClose: () => void) {
       offset.current = 0;
     }
 
+    /**
+     * Гасим прокрутку, которую делает сама система.
+     *
+     * При фокусе iOS подтягивает поле «в видимую часть» и, когда клавиатура
+     * закрывает низ, прокручивает шторку до упора — заголовок и само поле
+     * уезжают за верхний край, остаётся одна кнопка. Выглядит как прыжок
+     * размера, хотя размер тот же.
+     *
+     * Возвращаем прокрутку на место, но только для полей из верхней части
+     * шторки: поле в самом низу длинной карточки система поднимает правильно,
+     * и мешать ей там не надо.
+     */
+    let restore = 0;
+
+    function onFocus(event: FocusEvent) {
+      if (node === null) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target === null) return;
+      if (target.offsetTop > node.clientHeight * 0.45) return;
+
+      const until = Date.now() + 500;
+      clearInterval(restore);
+      restore = window.setInterval(() => {
+        if (node === null) return;
+        node.scrollTop = 0;
+        if (Date.now() > until) clearInterval(restore);
+      }, 16);
+    }
+
     node.addEventListener("touchstart", onStart, { passive: true });
     node.addEventListener("touchmove", onMove, { passive: false });
     node.addEventListener("touchend", onEnd);
     node.addEventListener("touchcancel", onEnd);
+    node.addEventListener("focusin", onFocus);
 
     return () => {
       node.removeEventListener("touchstart", onStart);
       node.removeEventListener("touchmove", onMove);
       node.removeEventListener("touchend", onEnd);
       node.removeEventListener("touchcancel", onEnd);
+      node.removeEventListener("focusin", onFocus);
+      clearInterval(restore);
       if (frame !== 0) cancelAnimationFrame(frame);
     };
   }, [node, onClose]);
