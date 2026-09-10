@@ -24,7 +24,16 @@ import { type Range, rangeFor, rangeTitle } from "../periods.js";
  * и без легенды: подложка дала бы коробку внутри коробки, а легенду заменяет
  * список под кольцом — там и суммы, и доли.
  */
-export function Analytics({ currency, today }: { currency: string; today: string }) {
+export function Analytics({
+  currency,
+  today,
+  onCategory,
+}: {
+  currency: string;
+  today: string;
+  /** Нажатие по категории уводит в историю — с этой категорией и этим периодом. */
+  onCategory: (slug: string, range: Range) => void;
+}) {
   const [range, setRange] = useState<Range>(() => rangeFor("month", today));
   const [mode, setMode] = useState<"categories" | "currencies">("categories");
   const [data, setData] = useState<Data | null>(null);
@@ -145,19 +154,28 @@ export function Analytics({ currency, today }: { currency: string; today: string
                   const share = total === 0 ? 0 : c.total / total;
 
                   return (
-                    <div key={c.slug} className="item dense">
+                    <button
+                      key={c.slug}
+                      className="item dense"
+                      onClick={() => {
+                        tap();
+                        onCategory(c.slug, range);
+                      }}
+                    >
                       <span
                         className="tile"
                         style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
                       >
                         <CategoryIcon slug={c.slug} />
                       </span>
-                      <span className="grow title">{c.title}</span>
+                      <span className="grow title" style={{ textAlign: "left" }}>
+                        {c.title}
+                      </span>
                       <span className="amount">
                         {money(c.total, data.currency)}
                         <span className="sub">{Math.round(share * 100)}%</span>
                       </span>
-                    </div>
+                    </button>
                   );
                 })
               : currencies.map((c, i) => {

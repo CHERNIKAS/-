@@ -13,6 +13,7 @@ import { Settings } from "./screens/Settings.js";
 import { Shared } from "./screens/Shared.js";
 import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
 import { notify, tap } from "./telegram.js";
+import type { Range } from "./periods.js";
 import { useBodyLock } from "./useBodyLock.js";
 import { useSheetDrag } from "./useSheetDrag.js";
 
@@ -33,6 +34,14 @@ export function App() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared">("settings");
+  /**
+   * Куда смотреть истории при переходе из разбора.
+   *
+   * Кольцо отвечает «сколько», а следующий вопрос всегда «на что именно» —
+   * и ответ на него уже есть в истории, надо только донести туда категорию и
+   * тот же период.
+   */
+  const [focus, setFocus] = useState<{ category: string; range: Range } | null>(null);
 
   const closeCurrency = useCallback(() => setPickingCurrency(false), []);
   const currencyDrag = useSheetDrag(closeCurrency);
@@ -93,9 +102,19 @@ export function App() {
           }
         />
       )}
-      {tab === "stats" && <Analytics currency={state.user.currency} today={state.today} />}
+      {tab === "stats" && (
+        <Analytics
+          currency={state.user.currency}
+          today={state.today}
+          onCategory={(category, range) => {
+            setFocus({ category, range });
+            setTab("history");
+          }}
+        />
+      )}
       {tab === "history" && (
         <History
+          focus={focus}
           categories={state.categories}
           today={state.today}
           currency={state.user.currency}

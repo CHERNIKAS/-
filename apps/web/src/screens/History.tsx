@@ -20,12 +20,15 @@ const PAYMENT_TITLE: Record<string, string> = {
  * вещи, ради которых не стоит заводить категорию: «подарок Ане», «штатив».
  */
 export function History({
+  focus,
   categories,
   today,
   currency,
   onExpense,
   onSwipe,
 }: {
+  /** Категория и период, с которыми пришли из разбора. */
+  focus: { category: string; range: Range } | null;
   categories: { slug: string; title: string; emoji: string }[];
   today: string;
   currency: string;
@@ -39,6 +42,14 @@ export function History({
   const [category, setCategory] = useState<string | null>(null);
   const [payment, setPayment] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Переход из разбора приносит с собой категорию и период — история
+  // открывается сразу на том, по чему нажали, а не на своих настройках.
+  useEffect(() => {
+    if (focus === null) return;
+    setCategory(focus.category);
+    setRange(focus.range);
+  }, [focus]);
 
   useEffect(() => {
     let alive = true;
