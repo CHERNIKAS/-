@@ -101,20 +101,25 @@ export function History({
 
       <PeriodPicker today={today} range={range} onChange={setRange} />
 
-      <div className="between" style={{ margin: "14px 2px 12px" }}>
-        <span className="label">{rangeTitle(range)}</span>
-        <span className="num muted">{money(total, currency)}</span>
-      </div>
+      <div className="between" style={{ margin: "14px 0 14px" }}>
+        <button
+          className={category === null && payment === null ? "pill ghost" : "pill on"}
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          {category === null && payment === null
+            ? "Фильтры"
+            : [
+                category === null ? null : categories.find((c) => c.slug === category)?.title,
+                payment === null ? null : PAYMENT_TITLE[payment],
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+        </button>
 
-      <button
-        className="pill ghost"
-        style={{ marginBottom: 14 }}
-        onClick={() => setFiltersOpen((open) => !open)}
-      >
-        {category === null && payment === null
-          ? "Фильтры"
-          : `Фильтры · ${[category === null ? null : categories.find((c) => c.slug === category)?.title, payment === null ? null : PAYMENT_TITLE[payment]].filter(Boolean).join(", ")}`}
-      </button>
+        <span className="num" style={{ fontSize: 17, fontWeight: 600 }}>
+          {money(total, currency)}
+        </span>
+      </div>
 
       {filtersOpen && (
         <div className="card" style={{ padding: 14, marginBottom: 16 }}>

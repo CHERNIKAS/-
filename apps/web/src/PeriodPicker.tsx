@@ -49,18 +49,19 @@ export function PeriodPicker({
             {period.title}
           </button>
         ))}
-      </div>
 
-      <div className="between" style={{ marginTop: 10 }}>
-        {extra ?? <span />}
+        {/* Свой период — часть того же ряда, а не отдельная строка: иначе
+            одинокая кнопка справа ломает выравнивание всего блока. */}
         <button
           className={range.key === "custom" ? "pill on" : "pill ghost"}
           onClick={() => choose("custom")}
         >
           <IconCalendar />
-          {range.key === "custom" ? rangeTitle(range) : "Свой период"}
+          {range.key === "custom" ? rangeTitle(range) : "Свой"}
         </button>
       </div>
+
+      {extra !== undefined && <div style={{ marginTop: 10 }}>{extra}</div>}
 
       {editing && (
         <div className="sheet short" onClick={() => setEditing(false)}>

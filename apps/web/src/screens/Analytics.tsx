@@ -60,7 +60,7 @@ export function Analytics({ currency, today }: { currency: string; today: string
 
   return (
     <>
-      <div style={{ padding: "12px 0 18px" }}>
+      <div style={{ padding: "12px 0 16px" }}>
         <PeriodPicker
           today={today}
           range={range}
@@ -104,7 +104,7 @@ export function Analytics({ currency, today }: { currency: string; today: string
       {data !== null && categories.length > 0 && (
         <>
           <div
-            style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}
+            style={{ display: "flex", justifyContent: "center", margin: "6px 0 14px" }}
             dangerouslySetInnerHTML={{
               __html: donutSvg(
                 slices.map((s, i) => ({
