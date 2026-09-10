@@ -11,3 +11,4 @@ coverage/
 *.txt
 .secrets/
 .backups/
+packages/core/probe.mts
