@@ -12,7 +12,7 @@ import { Recurring } from "./screens/Recurring.js";
 import { Settings } from "./screens/Settings.js";
 import { Shared } from "./screens/Shared.js";
 import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
-import { notify, tap } from "./telegram.js";
+import { backButton, notify, tap } from "./telegram.js";
 import type { Range } from "./periods.js";
 import { useBodyLock } from "./useBodyLock.js";
 import { useSheetDrag } from "./useSheetDrag.js";
@@ -42,6 +42,21 @@ export function App() {
    * тот же период.
    */
   const [focus, setFocus] = useState<{ category: string; range: Range } | null>(null);
+
+  /**
+   * Штатная кнопка «назад» в шапке Telegram.
+   *
+   * Провалившись из разбора в категорию, человек оказывается в истории с
+   * чужим фильтром, и выйти оттуда было нечем: снизу вкладки, сверху ничего.
+   */
+  useEffect(() => {
+    if (focus === null || tab !== "history") return;
+
+    return backButton(true, () => {
+      setFocus(null);
+      setTab("stats");
+    });
+  }, [focus, tab]);
 
   const closeCurrency = useCallback(() => setPickingCurrency(false), []);
   const currencyDrag = useSheetDrag(closeCurrency);
