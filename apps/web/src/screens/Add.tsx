@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Category } from "../api.js";
 import { moneyExact } from "../format.js";
 import { CategorySheet } from "../CategorySheet.js";
@@ -50,7 +50,24 @@ export function Add({
 
   const amount = Number(digits.replace(",", ".")) || 0;
   const canSave = mode === "text" ? text.trim() !== "" : amount > 0;
-  const placeholder = kind === "income" ? "поступление 2500" : "магаз 15 лир";
+  /**
+   * Примеры крутятся прямо в подсказке поля.
+   *
+   * Отдельные кнопки с примерами занимали место и требовали решения: нажать
+   * или не нажать. Строка в поле ничего не требует — её замечают краем глаза,
+   * пока думают, что писать.
+   */
+  const examples = kind === "income" ? INCOME_EXAMPLES : EXPENSE_EXAMPLES;
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (text !== "") return;
+
+    const timer = setInterval(() => setTick((n) => n + 1), 2600);
+    return () => clearInterval(timer);
+  }, [text, kind]);
+
+  const placeholder = examples[tick % examples.length] ?? "";
 
   async function save() {
     if (!canSave || busy) return;
@@ -204,24 +221,6 @@ export function Add({
                 if (e.key === "Enter") void save();
               }}
             />
-            {/* Примеры вместо описания: короткая строка «магаз 15 лир» учит
-                формату быстрее любого объяснения. Нажатие подставляет её —
-                можно попробовать, а не разгадывать. */}
-            <div className="chips" style={{ margin: "10px 0 10px" }}>
-              {(kind === "income" ? INCOME_EXAMPLES : EXPENSE_EXAMPLES).map((example) => (
-                <button
-                  key={example}
-                  className="pill ghost"
-                  onClick={() => {
-                    tap();
-                    setText(example);
-                  }}
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-
             <p className="dim" style={{ margin: "0 2px 16px" }}>
               Пиши как удобно: сумму, валюту и день пойму сам.
               {kind === "expense" && " Категорию подберу тоже."}
@@ -306,6 +305,7 @@ const EXPENSE_EXAMPLES = [
   "такси 12 вчера",
   "кофе 4.50, аптека 30",
   "продукты 800 грн 5 сентября",
+  "аптека 250 05.09.2026",
 ];
 
 const INCOME_EXAMPLES = ["+500", "зарплата 2500 вчера", "поступление 60000 лир"];

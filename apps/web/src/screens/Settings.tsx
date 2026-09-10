@@ -1,24 +1,9 @@
 import { useState } from "react";
 import { api, type State } from "../api.js";
 import { tap } from "../telegram.js";
+import { ZonePicker } from "../ZonePicker.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
-
-/**
- * Пояса под рукой — те, где человек с таким набором валют скорее всего и
- * живёт. Полный список из четырёхсот строк здесь был бы издевательством, а
- * свой пояс телефон и так знает.
- */
-const ZONES = [
-  "Europe/Istanbul",
-  "Europe/Kyiv",
-  "Europe/Warsaw",
-  "Europe/Lisbon",
-  "Europe/Berlin",
-  "Asia/Tbilisi",
-  "Asia/Dubai",
-  "Asia/Bangkok",
-];
 
 function localTime(zone: string): string {
   try {
@@ -51,6 +36,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
   const [budgetOn, setBudgetOn] = useState(state.user.monthlyBudget !== null);
   const user = state.user;
   const detected = deviceZone();
+  const [pickingZone, setPickingZone] = useState(false);
 
   function saveBudget() {
     const value = Number(budget.replace(",", "."));
@@ -233,27 +219,47 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         Часовой пояс
       </p>
 
-      <div className="card" style={{ padding: "4px 16px" }}>
-        <div className="item">
-          <span className="grow">
-            <span className="title">{user.timezone}</span>
-            <span className="sub">сейчас {localTime(user.timezone)}</span>
+      <button
+        className="card item"
+        style={{ padding: "10px 16px", width: "100%" }}
+        onClick={() => {
+          tap();
+          setPickingZone(true);
+        }}
+      >
+        <span className="grow">
+          <span className="title">{user.timezone.replace("_", " ")}</span>
+          <span className="sub">
+            сейчас {localTime(user.timezone)}
+            {detected !== null && detected !== user.timezone ? ` · на телефоне ${detected.split("/")[1]?.replace("_", " ")}` : ""}
           </span>
-          {detected !== null && detected !== user.timezone && (
-            <button className="pill on" onClick={() => void patch({ timezone: detected })}>
-              Взять с телефона
-            </button>
-          )}
-        </div>
-      </div>
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
 
-      <div className="chips" style={{ marginTop: 10 }}>
-        {ZONES.filter((zone) => zone !== user.timezone).map((zone) => (
-          <button key={zone} className="pill ghost" onClick={() => void patch({ timezone: zone })}>
-            {zone.split("/")[1]?.replace("_", " ") ?? zone}
-          </button>
-        ))}
-      </div>
+      {detected !== null && detected !== user.timezone && (
+        <button
+          className="linky"
+          style={{ display: "block", marginTop: 8 }}
+          onClick={() => void patch({ timezone: detected })}
+        >
+          Взять с телефона
+        </button>
+      )}
+
+      {pickingZone && (
+        <ZonePicker
+          current={user.timezone}
+          onClose={() => setPickingZone(false)}
+          onPick={(zone) => {
+            setPickingZone(false);
+            void patch({ timezone: zone });
+          }}
+        />
+      )}
+
     </>
   );
 }
