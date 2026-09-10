@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { tap } from "./telegram.js";
 
 /**
@@ -14,13 +14,22 @@ import { tap } from "./telegram.js";
 const CLOSE_AT = 110;
 
 export function useSheetDrag(onClose: () => void) {
-  const ref = useRef<HTMLDivElement | null>(null);
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
 
+  /**
+   * Узел приходит через колбэк-ссылку, а не через useRef: шторки валюты и
+   * периода появляются позже самого хука, и эффект на обычном ref срабатывал
+   * раньше, чем элемент существовал, — слушатели не вешались вовсе.
+   */
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const ref = useCallback((element: HTMLDivElement | null) => setNode(element), []);
+
+  const offsetRef = useRef(0);
+  offsetRef.current = offset;
+
   useEffect(() => {
-    const element = ref.current;
-    if (element === null) return;
+    if (node === null) return;
 
     let startY: number | null = null;
     let startX = 0;
@@ -36,7 +45,6 @@ export function useSheetDrag(onClose: () => void) {
 
     function onMove(event: TouchEvent) {
       const touch = event.touches[0];
-      const node = ref.current;
       if (touch === undefined || startY === null || node === null) return;
 
       const dy = touch.clientY - startY;
@@ -79,23 +87,23 @@ export function useSheetDrag(onClose: () => void) {
       setOffset(0);
     }
 
-    element.addEventListener("touchstart", onStart, { passive: true });
-    element.addEventListener("touchmove", onMove, { passive: false });
-    element.addEventListener("touchend", onEnd);
-    element.addEventListener("touchcancel", onEnd);
+    node.addEventListener("touchstart", onStart, { passive: true });
+    node.addEventListener("touchmove", onMove, { passive: false });
+    node.addEventListener("touchend", onEnd);
+    node.addEventListener("touchcancel", onEnd);
 
     return () => {
-      element.removeEventListener("touchstart", onStart);
-      element.removeEventListener("touchmove", onMove);
-      element.removeEventListener("touchend", onEnd);
-      element.removeEventListener("touchcancel", onEnd);
+      node.removeEventListener("touchstart", onStart);
+      node.removeEventListener("touchmove", onMove);
+      node.removeEventListener("touchend", onEnd);
+      node.removeEventListener("touchcancel", onEnd);
     };
-  }, [onClose]);
+  }, [node, onClose]);
 
-  // Обработчики живут вне React-рендера, поэтому текущее смещение читается
-  // через ref, а не из замыкания.
-  const offsetRef = useRef(0);
-  offsetRef.current = offset;
+  // Шторка могла открыться заново — начинаем с нуля, а не с прошлого смещения.
+  useEffect(() => {
+    if (node === null) setOffset(0);
+  }, [node]);
 
   return {
     ref,
