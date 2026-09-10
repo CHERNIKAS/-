@@ -4,6 +4,7 @@ import { SwipeRow } from "../SwipeRow.js";
 import { PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
+import { tap } from "../telegram.js";
 
 /**
  * Главный экран.
@@ -16,11 +17,14 @@ export function Home({
   state,
   onExpense,
   onCurrency,
+  onReview,
   onSwipe,
 }: {
   state: State;
   onExpense: (expense: Expense) => void;
   onCurrency: () => void;
+  /** Переход к разбору приходов и переводов. */
+  onReview: () => void;
   onSwipe: (expense: Expense, reset: () => void) => void;
 }) {
   const { user, totals, recent, today } = state;
@@ -145,6 +149,28 @@ export function Home({
           </div>
         )}
       </div>
+
+      {/* Пока приходы не разобраны, отчёты неполные — про это нельзя молчать. */}
+      {state.needsReview > 0 && (
+        <button
+          className="card item"
+          style={{ padding: "12px 16px", width: "100%", marginBottom: 18 }}
+          onClick={() => {
+            tap();
+            onReview();
+          }}
+        >
+          <span className="grow">
+            <span className="title">Разобрать приходы</span>
+            <span className="sub">
+              {state.needsReview} операций: доход это или перевод между своими счетами
+            </span>
+          </span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </button>
+      )}
 
       <p className="label" style={{ margin: "0 2px 10px" }}>
         Последние траты

@@ -24,6 +24,10 @@ export type Mapping = {
   currencyColumn: number | null;
   /** Колонка состояния операции, если она есть. */
   statusColumn: number | null;
+  /** Колонка вида операции: покупка, перевод, пополнение, обмен. */
+  typeColumn: number | null;
+  /** Колонка второй стороны: адрес кошелька, отправитель, номер счёта. */
+  counterpartyColumn: number | null;
   /** Значения статуса, при которых операция считается состоявшейся. */
   okStatuses: string[];
   /** Порядок частей даты в файле. */
@@ -64,7 +68,12 @@ export function buildDetectPrompt(rows: Sheet): string {
     "   счёта: покупка, оплата, снятие, списание. Приходы и зачисления в этот",
     "   список не входят, даже если операция состоялась.",
     "   Колонки состояния нет — оба поля null и пустой список.",
-    "7. confidence — насколько ты уверен, от 0 до 1. Ставь ниже 0.5, если",
+    "7. typeColumn — колонка вида операции, если он записан отдельно от",
+    "   состояния: WITHDRAW, DEPOSIT, SWAP, ПОКУПКА, ПЕРЕКАЗ, ПОПОВНЕННЯ.",
+    "   Она нужна, чтобы отличить перевод между своими счетами от траты.",
+    "8. counterpartyColumn — колонка второй стороны операции: адрес кошелька,",
+    "   отправитель или получатель перевода. Нет такой — null.",
+    "9. confidence — насколько ты уверен, от 0 до 1. Ставь ниже 0.5, если",
     "   структура непонятна: лучше честно не разобрать, чем разобрать неверно.",
     "",
     `Допустимые валюты: ${CURRENCIES.join(", ")}. Другой валюты быть не должно — тогда null.`,
@@ -105,6 +114,8 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
               creditColumn: { type: "INTEGER", nullable: true },
               currencyColumn: { type: "INTEGER", nullable: true },
               statusColumn: { type: "INTEGER", nullable: true },
+              typeColumn: { type: "INTEGER", nullable: true },
+              counterpartyColumn: { type: "INTEGER", nullable: true },
               okStatuses: { type: "ARRAY", items: { type: "STRING" } },
               dateOrder: { type: "STRING", enum: ["dmy", "mdy", "ymd"] },
               decimalSeparator: { type: "STRING", enum: [",", "."] },
@@ -145,6 +156,9 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
       creditColumn: raw["creditColumn"] === null ? null : num(raw["creditColumn"], -1),
       currencyColumn: raw["currencyColumn"] === null ? null : num(raw["currencyColumn"], -1),
       statusColumn: raw["statusColumn"] === null ? null : num(raw["statusColumn"], -1),
+      typeColumn: raw["typeColumn"] === null ? null : num(raw["typeColumn"], -1),
+      counterpartyColumn:
+        raw["counterpartyColumn"] === null ? null : num(raw["counterpartyColumn"], -1),
       okStatuses: Array.isArray(raw["okStatuses"])
         ? (raw["okStatuses"] as unknown[]).filter((v): v is string => typeof v === "string")
         : [],

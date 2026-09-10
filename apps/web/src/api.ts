@@ -61,6 +61,8 @@ export type State = {
   today: string;
   sharedActive: boolean;
   totals: { day: number; month: number; income: number };
+  /** Сколько приходов и переводов ждут ответа «доход или свои деньги». */
+  needsReview: number;
   currencies: { currency: string; amount: number; base: number }[];
   categories: Category[];
   recent: Expense[];
@@ -85,6 +87,20 @@ export type RecurringItem = {
   category: string | null;
   categorySlug: string | null;
 };
+
+export type ReviewItem = {
+  id: number;
+  amount: number;
+  currency: string;
+  base: number;
+  spentAt: string;
+  merchant: string;
+  kind: "expense" | "income" | "transfer";
+  /** Деньги пришли, а не ушли: от этого зависит, какой вопрос задаём. */
+  incoming: boolean;
+};
+
+export type ReviewGroup = { counterparty: string; count: number; items: ReviewItem[] };
 
 export type Analytics = {
   period: { key: string; label: string; from: string; to: string };
@@ -210,6 +226,11 @@ export const api = {
   deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
 
   /** Эмодзи не передаём: сервер подбирает его по названию той же таблицей, что и значок. */
+  review: () => request<{ total: number; groups: ReviewGroup[] }>("/review"),
+
+  saveReview: (decisions: { id: number; kind: string }[]) =>
+    request<{ ok: true }>("/review", { method: "PATCH", body: JSON.stringify({ decisions }) }),
+
   createCategory: (title: string) =>
     request<{ category: Category | null }>("/categories", {
       method: "POST",

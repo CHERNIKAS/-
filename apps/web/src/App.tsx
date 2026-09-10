@@ -9,6 +9,7 @@ import { Categories } from "./screens/Categories.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
 import { Recurring } from "./screens/Recurring.js";
+import { Review } from "./screens/Review.js";
 import { Settings } from "./screens/Settings.js";
 import { Shared } from "./screens/Shared.js";
 import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
@@ -33,7 +34,9 @@ export function App() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
-  const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared">("settings");
+  const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared" | "review">(
+    "settings",
+  );
   /**
    * Куда смотреть истории при переходе из разбора.
    *
@@ -112,6 +115,10 @@ export function App() {
       {tab === "home" && (
         <Home
           state={state}
+          onReview={() => {
+            setMore("review");
+            setTab("settings");
+          }}
           onExpense={setEditing}
           onCurrency={() => setPickingCurrency(true)}
           onSwipe={(expense, reset) =>
@@ -170,6 +177,7 @@ export function App() {
                 ["categories", "Категории"],
                 ["recurring", "Регулярные"],
                 ["shared", "Общий"],
+                ["review", "Разбор"],
               ] as const
             ).map(([key, title]) => (
               <button
@@ -186,6 +194,9 @@ export function App() {
           </div>
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
+          {more === "review" && (
+            <Review currency={state.user.currency} onDone={() => void reload()} />
+          )}
           {more === "categories" && (
             <Categories
               currency={state.user.currency}

@@ -4,6 +4,8 @@ import {
   type AppUser,
   applyRefund,
   createImportPreview,
+  findTransferPair,
+  linkTransferPair,
   refundAlreadyApplied,
   db,
   findRefundTarget,
@@ -95,7 +97,7 @@ export async function handleDocument(
       await ctx.api.editMessageText(
         status.chat.id,
         status.message_id,
-        "Расходов в файле не нашлось: возможно, это выписка по приходам.",
+        "Операций в файле не нашлось — возможно, формат оказался мне незнаком.",
       );
       return;
     }
@@ -118,34 +120,38 @@ export async function handleDocument(
 
     const base = user.currency as Currency;
     const rate = await rateToUsd(base, today());
+
+    const spending = fresh.filter((r) => r.kind === "expense");
+    const moving = fresh.filter((r) => r.kind !== "expense");
+
     let sumUsd = 0;
-    for (const row of fresh) {
+    for (const row of spending) {
       const currency = (row.currency ?? base) as Currency;
       sumUsd += row.amount * (await rateToUsd(currency, row.spentAt));
     }
 
-    const first = fresh.slice(0, 5);
+    const first = spending.slice(0, 5);
     const dates = fresh.map((r) => r.spentAt).sort();
 
     const lines = [
       `<b>${escape(name)}</b>`,
-      `${fresh.length} операций · ${dates[0]} — ${dates[dates.length - 1]}`,
+      `${spending.length} трат · ${dates[0]} — ${dates[dates.length - 1]}`,
       `на <code>${moneyShort(sumUsd / rate, base)}</code>`,
       "",
       ...first.map(
         (r) =>
           `<code>${moneyShort(r.amount, (r.currency ?? base) as Currency)}</code> · ${escape(r.description).slice(0, 40)}`,
       ),
-      fresh.length > 5 ? `<i>…и ещё ${fresh.length - 5}</i>` : "",
+      spending.length > 5 ? `<i>…и ещё ${spending.length - 5}</i>` : "",
       "",
       known.size > 0 ? `<i>${known.size} уже есть в базе — пропущу</i>` : "",
-      parsed.incomes > 0
-        ? `<i>${parsed.incomes} приходов — проверю, нет ли среди них возвратов</i>`
-        : "",
+      // Переводы и приходы не траты, но и не мусор: их надо будет разобрать.
+      moving.length > 0 ? `<i>${moving.length} переводов и приходов — спрошу о них после</i>` : "",
+      parsed.swaps > 0 ? `<i>${parsed.swaps} обменов внутри счёта — пропускаю</i>` : "",
       parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
       // Про отсутствие названий честнее предупредить до импорта, а не после.
-      describesMerchants(fresh) ? "" : `<i>в файле нет названий операций — категории проставить не из чего</i>`,
+      describesMerchants(spending) ? "" : `<i>в файле нет названий операций — категории проставить не из чего</i>`,
     ].filter((line) => line !== "");
 
     await ctx.api.editMessageText(status.chat.id, status.message_id, lines.join(NL), {
@@ -212,39 +218,71 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   }
 
   let created = 0;
+  let moved = 0;
+  let paired = 0;
 
   for (const row of rows) {
     const currency = (row.currency ?? base) as Currency;
     const rate = await rateToUsd(currency, row.spentAt);
     const clean = cleanMerchant(row.description);
-    const rule = findRule(clean, rules);
+    const rule = row.kind === "expense" ? findRule(clean, rules) : null;
 
-    const guessedSlug = rule === null ? guessed.get(clean) : undefined;
+    const guessedSlug = rule === null && row.kind === "expense" ? guessed.get(clean) : undefined;
     const category =
       rule !== null
         ? categories.find((c) => c.id === rule.categoryId)
         : guessedSlug === undefined
-          ? fallback
+          ? row.kind === "expense"
+            ? fallback
+            : undefined
           : categories.find((c) => c.slug === guessedSlug);
 
-    await db.insert(schema.expenses).values({
-      ledgerId: record.ledgerId,
-      userId: user.id,
-      categoryId: category?.id ?? null,
-      amount: row.amount.toFixed(2),
-      currency,
-      rateToUsd: rate.toFixed(8),
-      spentAt: row.spentAt,
-      merchant: row.description.slice(0, 128),
-      source: "app",
-      confidence: null,
-      // На доразбор уходит только то, чего не знают ни правила, ни модель.
-      needsReview: rule === null && guessedSlug === undefined,
-      importId: record.id,
-      fingerprint: row.fingerprint,
-    });
+    const [saved] = await db
+      .insert(schema.expenses)
+      .values({
+        ledgerId: record.ledgerId,
+        userId: user.id,
+        categoryId: category?.id ?? null,
+        amount: row.amount.toFixed(2),
+        currency,
+        rateToUsd: rate.toFixed(8),
+        spentAt: row.spentAt,
+        merchant: row.description.slice(0, 128),
+        source: "app",
+        confidence: null,
+        // На доразбор уходит только то, чего не знают ни правила, ни модель.
+        needsReview: row.kind === "expense" && rule === null && guessedSlug === undefined,
+        kind: row.kind,
+        // Направление переноса хранится там же, где источник дохода: в отчётах
+        // эта строка так и читается — «Приход» или «Отправка».
+        incomeSource:
+          row.kind === "transfer"
+            ? row.incoming
+              ? "Приход"
+              : "Отправка"
+            : row.kind === "income"
+              ? "Поступления"
+              : null,
+        counterparty: row.counterparty.slice(0, 128) || null,
+        // Перевод ждёт решения, пока не нашлась встречная половина: только
+        // человек знает, свои это деньги или чужие.
+        needsKindReview: row.kind !== "expense",
+        importId: record.id,
+        fingerprint: row.fingerprint,
+      })
+      .returning();
 
-    created++;
+    if (row.kind === "expense") created++;
+    else moved++;
+
+    // Пара к переносу могла прийти с выпиской другого счёта — ищем сразу.
+    if (row.kind === "transfer" && saved !== undefined) {
+      const half = await findTransferPair(record.ledgerId, row.amount, row.spentAt, row.incoming);
+      if (half !== undefined) {
+        await linkTransferPair(saved.id, half.id);
+        paired++;
+      }
+    }
   }
 
   // Возвраты гасят прошлые покупки: сверка по сумме, потому что названия у
@@ -277,8 +315,14 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   await markImportApplied(record.id, created);
 
   const pending = rows.filter(
-    (r) => findRule(cleanMerchant(r.description), rules) === null && !guessed.has(cleanMerchant(r.description)),
+    (r) =>
+      r.kind === "expense" &&
+      findRule(cleanMerchant(r.description), rules) === null &&
+      !guessed.has(cleanMerchant(r.description)),
   ).length;
+
+  // Сколько переносов осталось без пары — столько вопросов и предстоит.
+  const toReview = moved - paired * 2 < 0 ? 0 : moved - paired * 2;
 
   await ctx.editMessageText(
     [
@@ -290,6 +334,10 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
           ? `<i>${pending} трат без категории: модель недоступна, вернусь к ним позже</i>`
           : `<i>${pending} трат ушло в «Прочее» — поправишь, и я запомню</i>`,
       refunded > 0 ? `<i>${refunded} возвратов погасили прошлые покупки</i>` : "",
+      paired > 0 ? `<i>${paired} переводов свелись между твоими счетами</i>` : "",
+      toReview > 0
+        ? `<i>${toReview} приходов и переводов ждут ответа: доход это или свои деньги — разберёшь в приложении</i>`
+        : "",
     ]
       .filter((line) => line !== "")
       .join(NL),

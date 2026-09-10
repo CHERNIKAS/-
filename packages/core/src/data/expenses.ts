@@ -1,6 +1,7 @@
 import type { Currency } from "../index.js";
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db, schema } from "./db.js";
+import { PAIR_WINDOW_DAYS, pairTolerance } from "../import/kinds.js";
 import { looksLikeTransfer, sameMerchant } from "../refunds.js";
 
 export type Expense = typeof schema.expenses.$inferSelect;
@@ -30,8 +31,10 @@ export async function createExpense(values: {
   merchant: string;
   confidence: number | null;
   needsReview: boolean;
-  kind?: "expense" | "income";
+  kind?: "expense" | "income" | "transfer";
   incomeSource?: string | null;
+  counterparty?: string | null;
+  needsKindReview?: boolean;
 }): Promise<Expense> {
   const [row] = await db
     .insert(schema.expenses)
@@ -49,6 +52,8 @@ export async function createExpense(values: {
       needsReview: values.needsReview,
       kind: values.kind ?? "expense",
       incomeSource: values.incomeSource ?? null,
+      counterparty: values.counterparty ?? null,
+      needsKindReview: values.needsKindReview ?? false,
     })
     .returning();
 
@@ -186,6 +191,61 @@ export async function refundAlreadyApplied(
   });
 
   return row !== undefined;
+}
+
+/**
+ * Поиск встречной половины переноса.
+ *
+ * Одна и та же тысяча уходит с крипты и приходит на карту — в двух выписках
+ * это две строки, и без сведения они станут то доходом, то тратой. Ищем по
+ * сумме и дате: другого общего у них нет, названия в выписках разные.
+ */
+export async function findTransferPair(
+  ledgerId: number,
+  amount: number,
+  spentAt: string,
+  incoming: boolean,
+): Promise<Expense | undefined> {
+  const tolerance = pairTolerance(amount);
+  const from = shiftDays(spentAt, -PAIR_WINDOW_DAYS);
+  const to = shiftDays(spentAt, PAIR_WINDOW_DAYS);
+
+  const candidates = await db.query.expenses.findMany({
+    where: and(
+      eq(schema.expenses.ledgerId, ledgerId),
+      eq(schema.expenses.kind, "transfer"),
+      isNull(schema.expenses.deletedAt),
+      isNull(schema.expenses.pairedWithId),
+      gte(schema.expenses.spentAt, from),
+      lte(schema.expenses.spentAt, to),
+      gte(schema.expenses.amount, (amount - tolerance).toFixed(2)),
+      lte(schema.expenses.amount, (amount + tolerance).toFixed(2)),
+    ),
+    limit: 20,
+  });
+
+  // Пара — это встречное направление: уход к приходу и наоборот. Направление
+  // хранится в самой сумме: у прихода источник заполнен, у ухода пусто.
+  return candidates.find((c) => (c.incomeSource === "Приход") !== incoming);
+}
+
+/** Обе половины переноса ссылаются друг на друга и уходят из проверки. */
+export async function linkTransferPair(left: number, right: number): Promise<void> {
+  await db
+    .update(schema.expenses)
+    .set({ pairedWithId: right, needsKindReview: false })
+    .where(eq(schema.expenses.id, left));
+
+  await db
+    .update(schema.expenses)
+    .set({ pairedWithId: left, needsKindReview: false })
+    .where(eq(schema.expenses.id, right));
+}
+
+function shiftDays(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 /** Сумма трат в долларах за период, от даты включительно. */

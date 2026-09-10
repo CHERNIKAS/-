@@ -24,7 +24,7 @@ export const memberRoleEnum = pgEnum("member_role", ["owner", "member"]);
  * Переводы между своими счетами не хранятся вовсе: вывел с кошелька на карту —
  * денег не прибавилось и не убавилось, а в отчёте появился бы фантом.
  */
-export const kindEnum = pgEnum("expense_kind", ["expense", "income"]);
+export const kindEnum = pgEnum("expense_kind", ["expense", "income", "transfer"]);
 
 export const botMessageKindEnum = pgEnum("bot_message_kind", ["card", "panel", "summary"]);
 
@@ -155,7 +155,13 @@ export const expenses = pgTable(
     source: sourceEnum().notNull(),
     payment: paymentEnum().notNull().default("card"),
 
-    /** Расход или доход. Доходы не идут в кольцо категорий и в «Потрачено». */
+    /**
+     * Расход, доход или перевод между своими счетами.
+     *
+     * Перевод не участвует ни в «Потрачено», ни в доходах: деньги не появились
+     * и не исчезли, они переложены из кармана в карман. Хранить его всё равно
+     * нужно — иначе не с чем сводить приход на другом счёте.
+     */
     kind: kindEnum().notNull().default("expense"),
     /** Откуда доход: зарплата, фриланс, подарок, продажа. Только для доходов. */
     incomeSource: varchar("income_source", { length: 32 }),
@@ -173,6 +179,21 @@ export const expenses = pgTable(
     refundedAt: timestamp("refunded_at", { withTimezone: true }),
     /** Какой импорт погасил покупку — по нему же откат импорта её и вернёт. */
     refundImportId: integer("refund_import_id"),
+
+    /**
+     * Вторая сторона операции: адрес кошелька, отправитель перевода, номер
+     * счёта. По ней сводятся пары и группируется список на проверку.
+     */
+    counterparty: varchar({ length: 128 }),
+    /** Встречная операция на другом счёте: та же сумма, ушедшая и пришедшая. */
+    pairedWithId: integer("paired_with_id"),
+    /**
+     * Ждёт решения человека: доход это или свои деньги.
+     *
+     * Ответ не запоминается за адресом намеренно — с одного и того же адреса
+     * может прийти и заработок, и собственные деньги.
+     */
+    needsKindReview: boolean("needs_kind_review").notNull().default(false),
     /**
      * Отпечаток строки возврата.
      *

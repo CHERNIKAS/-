@@ -189,6 +189,19 @@ app.get("/api/state", async (request) => {
     byCurrency(ledgerId, monthPeriod),
   ]);
 
+  // Сколько операций ждёт ответа «доход или свои деньги»: главная должна об
+  // этом напомнить, иначе разбор потеряется в настройках.
+  const [pending] = await db
+    .select({ count: sql<string>`count(*)` })
+    .from(schema.expenses)
+    .where(
+      and(
+        eq(schema.expenses.ledgerId, ledgerId),
+        eq(schema.expenses.needsKindReview, true),
+        isNull(schema.expenses.deletedAt),
+      ),
+    );
+
   const recent = await db.query.expenses.findMany({
     where: and(eq(schema.expenses.ledgerId, ledgerId), isNull(schema.expenses.deletedAt)),
     orderBy: [desc(schema.expenses.spentAt), desc(schema.expenses.id)],
@@ -210,6 +223,7 @@ app.get("/api/state", async (request) => {
     today: todayDay,
     sharedActive: user.activeLedgerId !== null,
     totals: { day: dayUsd / rate, month: monthUsd / rate, income: monthIncome / rate },
+    needsReview: Number(pending?.count ?? 0),
     currencies: currencies.map((c) => ({
       currency: c.currency,
       amount: c.amount,
@@ -647,6 +661,96 @@ app.get("/api/analytics", async (request) => {
       base: c.totalUsd / rate,
     })),
   };
+});
+
+/**
+ * Операции, о которых знает только человек.
+ *
+ * Приход и перевод сами по себе не говорят, чьи это деньги: одна и та же
+ * тысяча с одного и того же адреса бывает и заработком, и собственными
+ * деньгами, переложенными с другого кошелька. Ответ не запоминается за
+ * адресом намеренно — спрашиваем каждый раз.
+ *
+ * Группировка по второй стороне нужна только глазу: так тридцать строк с
+ * одного адреса видно как один блок, а решение всё равно принимается по
+ * каждой операции.
+ */
+app.get("/api/review", async (request) => {
+  const { user, ledgerId } = request;
+  const rate = await baseRate(user, today());
+
+  const rows = await db.query.expenses.findMany({
+    where: and(
+      eq(schema.expenses.ledgerId, ledgerId),
+      eq(schema.expenses.needsKindReview, true),
+      isNull(schema.expenses.deletedAt),
+    ),
+    orderBy: [desc(schema.expenses.spentAt), desc(schema.expenses.id)],
+    limit: 400,
+  });
+
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = row.counterparty ?? row.merchant ?? "";
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  return {
+    total: rows.length,
+    groups: [...groups.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([counterparty, list]) => ({
+        counterparty,
+        count: list.length,
+        items: list.map((row) => {
+          const amount = Number(row.amount);
+          return {
+            id: row.id,
+            amount,
+            currency: row.currency,
+            base: (amount * Number(row.rateToUsd)) / rate,
+            spentAt: row.spentAt,
+            merchant: row.merchant ?? "",
+            kind: row.kind,
+            /** Куда двигались деньги: это и решает, какой вопрос задать. */
+            incoming: row.incomeSource === "Приход" || row.kind === "income",
+          };
+        }),
+      })),
+  };
+});
+
+const reviewSchema = z.object({
+  decisions: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        kind: z.enum(["expense", "income", "transfer"]),
+      }),
+    )
+    .max(400),
+});
+
+app.patch("/api/review", async (request) => {
+  const { ledgerId } = request;
+  const { decisions } = reviewSchema.parse(request.body);
+
+  for (const decision of decisions) {
+    await db
+      .update(schema.expenses)
+      .set({
+        kind: decision.kind,
+        needsKindReview: false,
+        // Доход без источника выглядел бы недоразобранной строкой.
+        incomeSource: decision.kind === "income" ? "Поступления" : null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(schema.expenses.id, decision.id), eq(schema.expenses.ledgerId, ledgerId)));
+  }
+
+  return { ok: true };
 });
 
 const settingsSchema = z.object({

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { applyMapping, parseAmount, parseDate } from "./apply.js";
+import type { ParseResult } from "./apply.js";
+
+/** Только траты: в разборе теперь лежат и приходы с переводами. */
+const spent = (r: ParseResult) => r.rows.filter((row) => row.kind === "expense");
 import type { Mapping } from "./detect.js";
 import { readCsv } from "./read.js";
 import { looksRejected } from "./statuses.js";
@@ -82,6 +86,8 @@ const MAPPING: Mapping = {
   creditColumn: null,
   currencyColumn: null,
   statusColumn: null,
+  typeColumn: null,
+  counterpartyColumn: null,
   okStatuses: [],
   dateOrder: "dmy",
   decimalSeparator: ",",
@@ -101,8 +107,8 @@ describe("applyMapping", () => {
 
   it("берёт только расходы", () => {
     const result = applyMapping(sheet, MAPPING, TODAY);
-    expect(result.rows).toHaveLength(2);
-    expect(result.rows.map((r) => r.amount)).toEqual([1500, 120.5]);
+    expect(spent(result)).toHaveLength(2);
+    expect(spent(result).map((r) => r.amount)).toEqual([1500, 120.5]);
   });
 
   it("приход считается отдельно и в траты не идёт", () => {
@@ -114,7 +120,7 @@ describe("applyMapping", () => {
   });
 
   it("суммы кладутся в плюс, знак остаётся смыслом строки", () => {
-    expect(applyMapping(sheet, MAPPING, TODAY).rows[0]?.amount).toBeGreaterThan(0);
+    expect(spent(applyMapping(sheet, MAPPING, TODAY))[0]?.amount).toBeGreaterThan(0);
   });
 
   it("отпечаток одинаковый у одинаковых строк и разный у разных", () => {
@@ -125,7 +131,7 @@ describe("applyMapping", () => {
   });
 
   it("валюта берётся из карты, если в файле её нет", () => {
-    expect(applyMapping(sheet, MAPPING, TODAY).rows[0]?.currency).toBe("TRY");
+    expect(spent(applyMapping(sheet, MAPPING, TODAY))[0]?.currency).toBe("TRY");
   });
 
   it("отменённые операции не становятся тратами", () => {
@@ -142,8 +148,8 @@ describe("applyMapping", () => {
       TODAY,
     );
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.description).toBe("MIGROS");
+    expect(spent(result)).toHaveLength(1);
+    expect(spent(result)[0]?.description).toBe("MIGROS");
     expect(result.cancelled).toBe(2);
   });
 
@@ -161,8 +167,8 @@ describe("applyMapping", () => {
       TODAY,
     );
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.description).toBe("MIGROS");
+    expect(spent(result)).toHaveLength(1);
+    expect(spent(result)[0]?.description).toBe("MIGROS");
     expect(result.cancelled).toBe(2);
   });
 
@@ -189,7 +195,7 @@ describe("applyMapping", () => {
       TODAY,
     );
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.description).toBe("MIGROS");
+    expect(spent(result)).toHaveLength(1);
+    expect(spent(result)[0]?.description).toBe("MIGROS");
   });
 });

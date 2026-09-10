@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { CURRENCIES, type Currency, matchCurrency } from "../currencies.js";
 import type { Mapping } from "./detect.js";
 import type { Sheet } from "./read.js";
+import { classifyOperation, isSwap, type OperationKind } from "./kinds.js";
 import { looksAccepted, looksIncoming, looksRejected } from "./statuses.js";
 
 /**
@@ -17,9 +18,16 @@ export type ImportedRow = {
   currency: Currency | null;
   description: string;
   fingerprint: string;
+  /** Трата, доход или перекладывание своих денег. */
+  kind: OperationKind;
+  /** Деньги пришли, а не ушли: по этому признаку сводятся пары переносов. */
+  incoming: boolean;
+  /** Вторая сторона: адрес кошелька, отправитель, номер счёта. */
+  counterparty: string;
 };
 
 export type ParseResult = {
+  /** Все состоявшиеся операции файла — с уже определённым видом. */
   rows: ImportedRow[];
   /** Строки, которые не разобрались: видно, сколько потеряно и почему. */
   skipped: number;
@@ -34,6 +42,8 @@ export type ParseResult = {
   credits: ImportedRow[];
   /** Отменённые и незавершённые операции — денег не двигали. */
   cancelled: number;
+  /** Обмены валют внутри счёта: денег не стало ни больше, ни меньше. */
+  swaps: number;
 };
 
 export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): ParseResult {
@@ -41,22 +51,29 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
   let skipped = 0;
   let incomes = 0;
   let cancelled = 0;
+  let swaps = 0;
   const credits: ImportedRow[] = [];
 
   for (const raw of sheet.slice(Math.max(0, mapping.skipRows))) {
     const dateCell = raw[mapping.dateColumn] ?? "";
     const amountCell = raw[mapping.amountColumn] ?? "";
     const description = (raw[mapping.descriptionColumn] ?? "").replace(/\s+/g, " ").trim();
-
     const status = mapping.statusColumn === null ? "" : (raw[mapping.statusColumn] ?? "").trim();
+    const type = mapping.typeColumn === null ? "" : (raw[mapping.typeColumn] ?? "").trim();
+    const counterparty =
+      mapping.counterpartyColumn === null ? "" : (raw[mapping.counterpartyColumn] ?? "").trim();
 
-    // Вид операции говорит прямо: это зачисление, а не трата. Такая строка
-    // уходит в приходы — среди них потом ищутся возвраты.
-    const incoming = status !== "" && looksIncoming(status);
+    // Обмен валют внутри счёта не движение денег: их сотни, и в отчётах им
+    // делать нечего.
+    if (isSwap(type)) {
+      swaps++;
+      continue;
+    }
 
     // Отменённая операция денег не двигала: в выписках их бывают десятки, и
     // посчитать их тратами — самый простой способ раздуть месяц вдвое.
-    if (!incoming && status !== "" && !accepted(status, mapping.okStatuses)) {
+    const incomingByStatus = status !== "" && looksIncoming(status);
+    if (!incomingByStatus && status !== "" && !accepted(status, mapping.okStatuses)) {
       cancelled++;
       continue;
     }
@@ -69,41 +86,43 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
       continue;
     }
 
-    // Приход в отдельной колонке либо противоположный знак — это не трата.
+    // Приход виден с трёх сторон: по отдельной колонке, по знаку суммы и по
+    // виду операции. Достаточно любой.
     const credit =
       mapping.creditColumn === null
         ? null
         : parseAmount(raw[mapping.creditColumn] ?? "", mapping.decimalSeparator);
 
-    if (credit !== null && credit !== 0) {
-      incomes++;
-      credits.push(credited(spentAt, Math.abs(credit), description, mapping, raw));
-      continue;
-    }
+    const byCredit = credit !== null && credit !== 0;
+    const bySign = mapping.expenseIsNegative ? value > 0 : value < 0;
+    const incoming = byCredit || bySign || incomingByStatus || looksIncoming(type);
 
-    const isExpense = !incoming && (mapping.expenseIsNegative ? value < 0 : value > 0);
-    if (!isExpense) {
-      incomes++;
-      credits.push(credited(spentAt, Math.abs(value), description, mapping, raw));
-      continue;
-    }
-
-    const amount = Math.abs(value);
+    const amount = Math.abs(byCredit ? (credit as number) : value);
     const currency =
       mapping.currencyColumn === null
         ? mapping.currency
         : (matchCurrency(raw[mapping.currencyColumn] ?? "") ?? mapping.currency);
 
-    rows.push({
+    const row: ImportedRow = {
       spentAt,
       amount,
       currency: currency !== null && CURRENCIES.includes(currency) ? currency : null,
-      description,
-      fingerprint: fingerprint(spentAt, amount, description),
-    });
+      description: description === "" ? counterparty : description,
+      fingerprint: fingerprint(spentAt, amount, description === "" ? counterparty : description),
+      kind: classifyOperation(type === "" ? status : type, incoming),
+      incoming,
+      counterparty,
+    };
+
+    rows.push(row);
+
+    if (incoming) {
+      incomes++;
+      credits.push(row);
+    }
   }
 
-  return { rows, skipped, incomes, cancelled, credits };
+  return { rows, skipped, incomes, cancelled, credits, swaps };
 }
 
 /**
@@ -122,28 +141,6 @@ function accepted(status: string, okStatuses: string[]): boolean {
   if (okStatuses.length === 0) return true;
 
   return okStatuses.some((ok) => ok.trim().toLowerCase() === clean);
-}
-
-/** Приход в том же виде, что и трата: дальше его сверяют с покупками по сумме. */
-function credited(
-  spentAt: string,
-  amount: number,
-  description: string,
-  mapping: Mapping,
-  raw: string[],
-): ImportedRow {
-  const currency =
-    mapping.currencyColumn === null
-      ? mapping.currency
-      : (matchCurrency(raw[mapping.currencyColumn] ?? "") ?? mapping.currency);
-
-  return {
-    spentAt,
-    amount,
-    currency: currency !== null && CURRENCIES.includes(currency) ? currency : null,
-    description,
-    fingerprint: fingerprint(spentAt, amount, description),
-  };
 }
 
 /**

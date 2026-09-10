@@ -1,0 +1,165 @@
+import { useEffect, useState } from "react";
+import { api, type ReviewGroup } from "../api.js";
+import { dayTitle, moneyExact } from "../format.js";
+import { notify, tap } from "../telegram.js";
+
+/**
+ * Разбор приходов и переводов.
+ *
+ * Выписка не знает, чьи это деньги: одна и та же тысяча с одного и того же
+ * адреса бывает и заработком, и собственными деньгами с другого кошелька.
+ * Ответ не запоминается за адресом намеренно — в следующий раз спросим заново.
+ *
+ * Списком, а не вопросами в чат: две сотни отдельных сообщений — это не разбор,
+ * а наказание. Здесь всё видно разом, решения ставятся галочками и уходят одной
+ * кнопкой.
+ */
+export function Review({ currency, onDone }: { currency: string; onDone: () => void }) {
+  const [groups, setGroups] = useState<ReviewGroup[] | null>(null);
+  const [choice, setChoice] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .review()
+      .then((result) => {
+        setGroups(result.groups);
+
+        // Предзаполняем тем, что определил разбор: чаще всего это и есть ответ,
+        // а человеку остаётся поправить исключения.
+        const start: Record<number, string> = {};
+        for (const group of result.groups) {
+          for (const item of group.items) start[item.id] = item.kind;
+        }
+        setChoice(start);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Не загрузилось"));
+  }, []);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.saveReview(Object.entries(choice).map(([id, kind]) => ({ id: Number(id), kind })));
+      notify("success");
+      onDone();
+    } catch (e) {
+      notify("error");
+      setError(e instanceof Error ? e.message : "Не сохранилось");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Отметить всю группу разом: галочки в текущем списке, не правило на будущее. */
+  function markGroup(group: ReviewGroup, kind: string) {
+    tap();
+    setChoice((current) => {
+      const next = { ...current };
+      for (const item of group.items) next[item.id] = kind;
+      return next;
+    });
+  }
+
+  const total = groups?.reduce((sum, g) => sum + g.count, 0) ?? 0;
+
+  return (
+    <>
+      <p className="label" style={{ margin: "12px 2px 6px" }}>
+        Приходы и переводы
+      </p>
+      <p className="dim" style={{ margin: "0 2px 14px" }}>
+        Выписка не знает, чьи это деньги. Отметь, что доход, а что перекладывание
+        между своими счетами — второе в отчёты не попадёт.
+      </p>
+
+      {error !== null && <div className="err">{error}</div>}
+      {groups === null && error === null && <p className="spinner">Загружаю…</p>}
+
+      {groups !== null && total === 0 && (
+        <div className="card" style={{ padding: 28, textAlign: "center" }}>
+          <p className="muted">Всё разобрано</p>
+        </div>
+      )}
+
+      {groups?.map((group) => (
+        <div key={group.counterparty} style={{ marginBottom: 18 }}>
+          <div className="between" style={{ margin: "0 2px 8px", gap: 10 }}>
+            <span className="label" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+              {shorten(group.counterparty)}
+            </span>
+            <span className="dim">{group.count}</span>
+          </div>
+
+          <div className="chips" style={{ marginBottom: 8 }}>
+            <button className="pill ghost" onClick={() => markGroup(group, "transfer")}>
+              все мои
+            </button>
+            <button
+              className="pill ghost"
+              onClick={() => markGroup(group, group.items[0]?.incoming === true ? "income" : "expense")}
+            >
+              {group.items[0]?.incoming === true ? "все доход" : "все расход"}
+            </button>
+          </div>
+
+          <div className="card rows" style={{ padding: "2px 16px" }}>
+            {group.items.map((item) => (
+              <div key={item.id} className="item">
+                <span className="grow">
+                  <span className="title">
+                    {item.incoming ? "+" : "−"}
+                    {moneyExact(item.amount, item.currency)}
+                  </span>
+                  <span className="sub">
+                    {dayTitle(item.spentAt, item.spentAt)}
+                    {item.currency === currency ? "" : ` · ≈ ${moneyExact(item.base, currency)}`}
+                  </span>
+                </span>
+
+                <span className="seg" style={{ width: 168 }}>
+                  <button
+                    className={choice[item.id] === "transfer" ? "on" : ""}
+                    onClick={() => {
+                      tap();
+                      setChoice((c) => ({ ...c, [item.id]: "transfer" }));
+                    }}
+                  >
+                    мои
+                  </button>
+                  <button
+                    className={choice[item.id] !== "transfer" ? "on" : ""}
+                    onClick={() => {
+                      tap();
+                      setChoice((c) => ({
+                        ...c,
+                        [item.id]: item.incoming ? "income" : "expense",
+                      }));
+                    }}
+                  >
+                    {item.incoming ? "доход" : "расход"}
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {total > 0 && (
+        <button className="cta mint" disabled={busy} onClick={() => void save()}>
+          {busy ? "Сохраняю…" : `Готово · ${total}`}
+        </button>
+      )}
+    </>
+  );
+}
+
+/** Адрес кошелька целиком не читается: середину видеть незачем. */
+function shorten(value: string): string {
+  if (value === "") return "без адреса";
+  if (value.length <= 22) return value;
+
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
