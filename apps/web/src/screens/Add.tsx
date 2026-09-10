@@ -123,16 +123,11 @@ export function Add({
   }
 
   return (
-    <div className="sheet fit" onClick={onClose}>
+    <div className="sheet" onClick={onClose}>
       <div
         ref={drag.ref}
         onClick={(e) => e.stopPropagation()}
-        style={{
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          ...drag.sheetStyle,
-        }}
+        style={{ position: "relative", ...drag.sheetStyle }}
       >
         <div className="grabber" />
 
@@ -276,9 +271,7 @@ export function Add({
           </>
         )}
 
-        {/* Кнопка внизу шторки, а не сразу под полем: с открытой клавиатурой
-            она оказывается прямо над ней, а с закрытой — там, где палец. */}
-        <div className="row" style={{ gap: 10, marginTop: "auto", paddingTop: 8 }}>
+        <div className="row" style={{ gap: 10, marginTop: 18 }}>
           <button
             className="pill"
             style={{ padding: "14px 16px" }}
