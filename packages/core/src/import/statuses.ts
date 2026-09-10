@@ -63,3 +63,24 @@ const ACCEPTED = new Set([
 export function looksAccepted(value: string): boolean {
   return ACCEPTED.has(value.trim().toLowerCase().replace(/\s+/g, " "));
 }
+
+/**
+ * Состояния, означающие приход.
+ *
+ * Такая строка — не отказ и не трата: деньги пришли. Отличать её важно, чтобы
+ * зачисление не попало в расходы и при этом осталось приходом — среди них
+ * потом ищутся возвраты.
+ */
+const INCOMING = [
+  "надходження", "зарахування", "зачислення", "поповнення",
+  "поступление", "зачисление", "пополнение", "приход", "возврат",
+  "deposit", "credit", "incoming", "refund", "payout", "top up", "topup",
+  "gelen", "yatirma", "iade",
+];
+
+export function looksIncoming(value: string): boolean {
+  const clean = value.trim().toLowerCase().replace(/[ ]+/g, " ");
+  if (clean === "") return false;
+
+  return INCOMING.some((word) => clean.includes(word));
+}

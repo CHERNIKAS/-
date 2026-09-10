@@ -101,26 +101,71 @@ async function readPdf(file: Uint8Array): Promise<Sheet> {
   const document = await getDocumentProxy(file);
   const { text } = await extractText(document, { mergePages: true });
 
-  return text
+  const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line !== "")
-    .map(splitPdfLine);
+    .filter((line) => line !== "");
+
+  return joinRecords(lines).map(splitPdfLine);
+}
+
+/** Строка начинается с даты — значит, это начало новой операции. */
+const STARTS_WITH_DATE = /^(\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}|\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})\b/u;
+
+/**
+ * Склейка операции из нескольких строк.
+ *
+ * В выписке ПУМБ одна операция разложена на три строки: дата, потом время с
+ * суммами, потом хвост названия. По отдельности это мусор: в строке с датой нет
+ * суммы, в строке с суммой нет даты. Собираем обратно — новая операция
+ * начинается там, где строка начинается с даты.
+ */
+function joinRecords(lines: string[]): string[] {
+  const records: string[] = [];
+
+  for (const line of lines) {
+    if (STARTS_WITH_DATE.test(line) || records.length === 0) {
+      records.push(line);
+      continue;
+    }
+
+    const current = records[records.length - 1] ?? "";
+
+    // Пока в операции нет ни одной суммы, следующая строка — её продолжение:
+    // в этой выписке дата и суммы стоят на разных строках. Когда сумма уже
+    // есть, продолжением считается только короткий хвост вроде «TRTR Покупка».
+    // Длинная строка после суммы — это подвал: итоги, реквизиты, оговорки.
+    const hasMoney = MONEY.test(current);
+    MONEY.lastIndex = 0;
+
+    if (hasMoney && line.length > 24) continue;
+
+    records[records.length - 1] = `${records[records.length - 1]} ${line}`;
+  }
+
+  return records;
 }
 
 /**
- * Строка операции в PDF — сплошной текст без табуляций:
- * «2026.06.01, 20:05 MIGROS-154203,ISTANBUL,TUR -5.39 USDC».
+ * Строка операции в PDF — сплошной текст без табуляций.
  *
- * Поэтому разбираем её по форме, а не по пробелам: дата в начале, сумма с
- * валютой в конце, всё между ними — название. Делить по пробелам здесь нельзя:
- * в названии магазина их сколько угодно.
+ * Форматов два, и оба разбираются по форме, а не по пробелам: в названии
+ * магазина пробелов сколько угодно.
  *
- * Не подошло — откатываемся на деление по группам пробелов, как в табличных PDF.
+ * Простой: «2026.06.01, 20:05 MIGROS,ISTANBUL,TUR -5.39 USDC» — дата, название,
+ * сумма с валютой.
+ *
+ * Банковский: в строке несколько сумм подряд — в валюте операции, в валюте
+ * счёта и комиссия, — потом номер карты, название и вид операции в конце. Там
+ * колонки достаются по порядку: сумма всегда идёт со своей валютой, а карта
+ * узнаётся по звёздочкам.
  */
 export function splitPdfLine(line: string): string[] {
+  const rich = splitRichLine(line);
+  if (rich !== null) return rich;
+
   const match = PDF_LINE.exec(line);
-  if (match === null) return line.split(/\s{2,}|\t/).map((cell) => cell.trim());
+  if (match === null) return line.split(/\s{2,}|	/).map((cell) => cell.trim());
 
   const [, date, time, title, amount, currency] = match;
 
@@ -132,6 +177,58 @@ export function splitPdfLine(line: string): string[] {
     currency ?? "",
   ];
 }
+
+/**
+ * Пара «сумма и её валюта»: 108.00 TRY, 1 234,56 UAH.
+ *
+ * Взгляд назад обязателен: рядом в строке стоят время и дата, и без него
+ * «23:15:38 108.00» читалось как одно число 38 108,00 — секунды превращались
+ * в тысячи.
+ */
+const MONEY = /(?<![\d.,:\-/])(\d{1,3}(?:[\s ]\d{3})*(?:[.,]\d{1,2})?)\s+([A-Z]{3})\b/gu;
+
+/**
+ * Колонки всегда на одних местах, даже если чего-то в строке нет: карта
+ * определяет, где кончаются числа и начинается название, а вид операции — это
+ * последнее слово, по нему потом отсеиваются проверки карты и зачисления.
+ */
+function splitRichLine(line: string): string[] | null {
+  const start = STARTS_WITH_DATE.exec(line);
+  if (start === null) return null;
+
+  const money = [...line.matchAll(MONEY)];
+  if (money.length < 2) return null;
+
+  const card = /\d{4,6}\*{2,}\d{2,4}/u.exec(line);
+  if (card === null) return null;
+
+  const time = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/u.exec(line);
+  const tail = line.slice((card.index ?? 0) + card[0].length).trim();
+
+  // Вид операции — последнее слово хвоста; «Перевірка рахунку» из двух, но
+  // первого слова достаточно, чтобы отличить её от покупки.
+  const words = tail.split(/\s+/);
+  const kind = words.length > 1 ? (words[words.length - 1] ?? "") : "";
+  const title = words.slice(0, Math.max(1, words.length - 1)).join(" ");
+
+  const amount = (index: number) => (money[index]?.[1] ?? "").replace(/[\s ]/g, "");
+  const currency = (index: number) => money[index]?.[2] ?? "";
+
+  return [
+    start[0],
+    time?.[1] ?? "",
+    amount(0),
+    currency(0),
+    amount(1),
+    currency(1),
+    amount(2),
+    currency(2),
+    card[0],
+    title,
+    kind,
+  ];
+}
+
 
 const PDF_LINE =
   /^(\d{2,4}[.\-/]\d{1,2}[.\-/]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)?\s*(.*?)\s+([+-]?\d[\d\s.,]*)\s*([A-Za-z]{3,5})?$/u;

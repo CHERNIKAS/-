@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { CURRENCIES, type Currency, matchCurrency } from "../currencies.js";
 import type { Mapping } from "./detect.js";
 import type { Sheet } from "./read.js";
-import { looksAccepted, looksRejected } from "./statuses.js";
+import { looksAccepted, looksIncoming, looksRejected } from "./statuses.js";
 
 /**
  * Применение карты формата к строкам файла.
@@ -48,14 +48,17 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
     const amountCell = raw[mapping.amountColumn] ?? "";
     const description = (raw[mapping.descriptionColumn] ?? "").replace(/\s+/g, " ").trim();
 
+    const status = mapping.statusColumn === null ? "" : (raw[mapping.statusColumn] ?? "").trim();
+
+    // Вид операции говорит прямо: это зачисление, а не трата. Такая строка
+    // уходит в приходы — среди них потом ищутся возвраты.
+    const incoming = status !== "" && looksIncoming(status);
+
     // Отменённая операция денег не двигала: в выписках их бывают десятки, и
     // посчитать их тратами — самый простой способ раздуть месяц вдвое.
-    if (mapping.statusColumn !== null) {
-      const status = (raw[mapping.statusColumn] ?? "").trim();
-      if (status !== "" && !accepted(status, mapping.okStatuses)) {
-        cancelled++;
-        continue;
-      }
+    if (!incoming && status !== "" && !accepted(status, mapping.okStatuses)) {
+      cancelled++;
+      continue;
     }
 
     const spentAt = parseDate(dateCell, mapping.dateOrder, today);
@@ -78,7 +81,7 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
       continue;
     }
 
-    const isExpense = mapping.expenseIsNegative ? value < 0 : value > 0;
+    const isExpense = !incoming && (mapping.expenseIsNegative ? value < 0 : value > 0);
     if (!isExpense) {
       incomes++;
       credits.push(credited(spentAt, Math.abs(value), description, mapping, raw));
