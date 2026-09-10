@@ -1,6 +1,6 @@
 import type { Currency } from "@costnote/core";
-import { db, schema } from "@costnote/core/data";
-import { and, eq, isNull } from "drizzle-orm";
+import { db, schema, rateToUsd, today, totalSince } from "@costnote/core/data";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 /**
  * Отражение действий приложения в чате.
@@ -116,6 +116,60 @@ export function refundText(d: {
  */
 export async function sendPlain(token: string, chatId: string, text: string): Promise<void> {
   await call(token, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML" });
+}
+
+/**
+ * Обновление закреплённой панели.
+ *
+ * Панель показывает итог дня и месяца, и её правит бот после каждой траты из
+ * чата. Но траты меняются и в приложении: поправил дату — «сегодня» стало
+ * другим, а закреп продолжал показывать вчерашнее число, будто ничего не
+ * произошло. Одни и те же данные не должны расходиться между поверхностями.
+ */
+export async function refreshPanel(
+  token: string,
+  user: { id: number; currency: string; monthlyBudget: string | null },
+  ledgerId: number,
+): Promise<void> {
+  const panel = await db.query.botMessages.findFirst({
+    where: and(
+      eq(schema.botMessages.userId, user.id),
+      eq(schema.botMessages.kind, "panel"),
+      isNull(schema.botMessages.cleanedAt),
+    ),
+    orderBy: desc(schema.botMessages.createdAt),
+  });
+
+  if (panel === undefined) return;
+
+  const todayDay = today();
+  const base = user.currency as Currency;
+  const rate = await rateToUsd(base, todayDay);
+
+  const dayUsd = await totalSince(ledgerId, todayDay);
+  const monthUsd = await totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`);
+
+  const lines = [
+    `<b>Сегодня</b>  <code>${money(dayUsd / rate, base)}</code>`,
+    `<i>месяц</i>  <code>${money(monthUsd / rate, base)}</code>`,
+  ];
+
+  if (user.monthlyBudget !== null) {
+    const budget = Number(user.monthlyBudget);
+    const left = budget - monthUsd / rate;
+    lines.push(
+      left >= 0
+        ? `<i>осталось</i>  <code>${money(left, base)}</code>`
+        : `<i>перерасход</i>  <code>${money(-left, base)}</code>`,
+    );
+  }
+
+  await call(token, "editMessageText", {
+    chat_id: panel.chatId,
+    message_id: panel.messageId,
+    text: lines.join(NL),
+    parse_mode: "HTML",
+  }).catch(() => undefined);
 }
 
 /** Карточка новой траты — с теми же кнопками, что у трат из чата. */

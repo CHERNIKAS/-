@@ -66,6 +66,7 @@ import {
   cardText,
   incomeText,
   refundText,
+  refreshPanel,
   removeCards,
   sendCard,
   sendPlain,
@@ -518,6 +519,9 @@ app.post("/api/expenses", async (request, reply) => {
     );
   }
 
+  // Итог дня в закрепе тоже меняется — трата добавилась.
+  await refreshPanel(BOT_TOKEN, user, ledgerId).catch(() => undefined);
+
   // Возврат в чат тоже уходит: иначе трата в приложении молча уменьшилась, и
   // человек ищет, куда делись деньги.
   for (const done of refunds) {
@@ -655,6 +659,10 @@ app.patch("/api/expenses/:id", async (request, reply) => {
     await updateCard(BOT_TOKEN, id, cardText(card)).catch(() => undefined);
   }
 
+  // Итог дня в закрепе меняется и от правки: поправил дату — «сегодня» стало
+  // другим, а панель продолжала показывать вчерашнее.
+  await refreshPanel(BOT_TOKEN, user, ledgerId).catch(() => undefined);
+
   return { expense: updated ? serialize(updated, categories, rate) : null };
 });
 
@@ -672,6 +680,7 @@ app.delete("/api/expenses/:id", async (request, reply) => {
   // Карточка этой траты в чате должна исчезнуть вместе с ней: иначе в боте
   // остаётся сообщение о трате, которой уже нет.
   await removeCards(BOT_TOKEN, id).catch(() => undefined);
+  await refreshPanel(BOT_TOKEN, request.user, request.ledgerId).catch(() => undefined);
 
   return { ok: true };
 });
