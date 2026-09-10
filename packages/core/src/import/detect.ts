@@ -22,6 +22,10 @@ export type Mapping = {
   /** Отдельная колонка прихода, если расход и приход разнесены. */
   creditColumn: number | null;
   currencyColumn: number | null;
+  /** Колонка состояния операции, если она есть. */
+  statusColumn: number | null;
+  /** Значения статуса, при которых операция считается состоявшейся. */
+  okStatuses: string[];
   /** Порядок частей даты в файле. */
   dateOrder: "dmy" | "mdy" | "ymd";
   decimalSeparator: "," | ".";
@@ -54,7 +58,11 @@ export function buildDetectPrompt(rows: Sheet): string {
     "4. currencyColumn — только если валюта лежит отдельной колонкой.",
     "   Если валюта у всего файла одна, укажи её в currency.",
     "5. expenseIsNegative — true, если расходы записаны со знаком минус.",
-    "6. confidence — насколько ты уверен, от 0 до 1. Ставь ниже 0.5, если",
+    "6. statusColumn — колонка состояния операции, если она есть: там стоят",
+    "   значения вроде DONE, CANCELED, PENDING, FAILED, REVERSED, ОТМЕНЕНА.",
+    "   В okStatuses перечисли те значения, при которых операция состоялась.",
+    "   Колонки состояния нет — оба поля null и пустой список.",
+    "7. confidence — насколько ты уверен, от 0 до 1. Ставь ниже 0.5, если",
     "   структура непонятна: лучше честно не разобрать, чем разобрать неверно.",
     "",
     `Допустимые валюты: ${CURRENCIES.join(", ")}. Другой валюты быть не должно — тогда null.`,
@@ -94,6 +102,8 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
               descriptionColumn: { type: "INTEGER" },
               creditColumn: { type: "INTEGER", nullable: true },
               currencyColumn: { type: "INTEGER", nullable: true },
+              statusColumn: { type: "INTEGER", nullable: true },
+              okStatuses: { type: "ARRAY", items: { type: "STRING" } },
               dateOrder: { type: "STRING", enum: ["dmy", "mdy", "ymd"] },
               decimalSeparator: { type: "STRING", enum: [",", "."] },
               expenseIsNegative: { type: "BOOLEAN" },
@@ -132,6 +142,10 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
       descriptionColumn: num(raw["descriptionColumn"], 2),
       creditColumn: raw["creditColumn"] === null ? null : num(raw["creditColumn"], -1),
       currencyColumn: raw["currencyColumn"] === null ? null : num(raw["currencyColumn"], -1),
+      statusColumn: raw["statusColumn"] === null ? null : num(raw["statusColumn"], -1),
+      okStatuses: Array.isArray(raw["okStatuses"])
+        ? (raw["okStatuses"] as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
       dateOrder: (["dmy", "mdy", "ymd"] as const).includes(raw["dateOrder"] as "dmy")
         ? (raw["dateOrder"] as Mapping["dateOrder"])
         : "dmy",

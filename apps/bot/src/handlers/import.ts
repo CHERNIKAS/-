@@ -129,6 +129,7 @@ export async function handleDocument(
       "",
       known.size > 0 ? `<i>${known.size} уже есть в базе — пропущу</i>` : "",
       parsed.incomes > 0 ? `<i>${parsed.incomes} приходов и переводов — не беру</i>` : "",
+      parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
     ].filter((line) => line !== "");
 

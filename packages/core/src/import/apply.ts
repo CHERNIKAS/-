@@ -24,17 +24,30 @@ export type ParseResult = {
   skipped: number;
   /** Приходы и переводы: в расходы они не идут. */
   incomes: number;
+  /** Отменённые и незавершённые операции — денег не двигали. */
+  cancelled: number;
 };
 
 export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): ParseResult {
   const rows: ImportedRow[] = [];
   let skipped = 0;
   let incomes = 0;
+  let cancelled = 0;
 
   for (const raw of sheet.slice(Math.max(0, mapping.skipRows))) {
     const dateCell = raw[mapping.dateColumn] ?? "";
     const amountCell = raw[mapping.amountColumn] ?? "";
     const description = (raw[mapping.descriptionColumn] ?? "").replace(/\s+/g, " ").trim();
+
+    // Отменённая операция денег не двигала: в выписках их бывают десятки, и
+    // посчитать их тратами — самый простой способ раздуть месяц вдвое.
+    if (mapping.statusColumn !== null && mapping.okStatuses.length > 0) {
+      const status = (raw[mapping.statusColumn] ?? "").trim().toLowerCase();
+      if (status !== "" && !mapping.okStatuses.some((ok) => ok.toLowerCase() === status)) {
+        cancelled++;
+        continue;
+      }
+    }
 
     const spentAt = parseDate(dateCell, mapping.dateOrder, today);
     const value = parseAmount(amountCell, mapping.decimalSeparator);
@@ -76,7 +89,7 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
     });
   }
 
-  return { rows, skipped, incomes };
+  return { rows, skipped, incomes, cancelled };
 }
 
 /** Отпечаток строки: одинаковые операции из одного файла не задваиваются. */

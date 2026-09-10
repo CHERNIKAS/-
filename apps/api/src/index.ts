@@ -48,6 +48,7 @@ import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { z } from "zod";
 import { verifyInitData } from "./auth.js";
+import { type CardData, cardText, removeCards, sendCard, updateCard } from "./telegram.js";
 
 
 const BOT_TOKEN = process.env["BOT_TOKEN"] ?? "";
@@ -95,6 +96,45 @@ function shiftDay(day: string, days: number): string {
 
 async function baseRate(user: AppUser, day: string): Promise<number> {
   return rateToUsd(user.currency as Currency, day);
+}
+
+
+/**
+ * Данные карточки для чата.
+ *
+ * Собираются здесь, а не в боте: приложение теперь тоже шлёт карточки, и текст
+ * должен быть один и тот же — иначе трата из чата и трата из приложения
+ * выглядели бы по-разному.
+ */
+async function buildCard(
+  user: AppUser,
+  ledgerId: number,
+  expense: typeof schema.expenses.$inferSelect,
+): Promise<CardData> {
+  const categories = await listCategories(ledgerId);
+  const category = categories.find((c) => c.id === expense.categoryId) ?? null;
+  const todayDay = today();
+  const base = user.currency as Currency;
+  const baseRateNow = await rateToUsd(base, todayDay);
+  const amount = Number(expense.amount);
+
+  const [dayUsd, monthUsd] = await Promise.all([
+    totalSince(ledgerId, todayDay),
+    totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`),
+  ]);
+
+  return {
+    emoji: category?.emoji ?? "📦",
+    categoryTitle: category?.title ?? null,
+    amount,
+    currency: expense.currency as Currency,
+    baseAmount: (amount * Number(expense.rateToUsd)) / baseRateNow,
+    baseCurrency: base,
+    merchant: expense.merchant ?? "",
+    dayLabel: expense.spentAt === todayDay ? "сегодня" : expense.spentAt,
+    dayTotal: dayUsd / baseRateNow,
+    monthTotal: monthUsd / baseRateNow,
+  };
 }
 
 app.get("/api/state", async (request) => {
@@ -315,6 +355,15 @@ app.post("/api/expenses", async (request, reply) => {
     created.push(expense);
   }
 
+  // Карточка в чат — чтобы трата из приложения выглядела так же, как трата
+  // из бота, и всё, что произошло, было видно в одном месте.
+  for (const expense of created) {
+    const card = await buildCard(user, ledgerId, expense);
+    await sendCard(BOT_TOKEN, user.tgId, user.id, expense.id, cardText(card)).catch(
+      () => undefined,
+    );
+  }
+
   const rate = await baseRate(user, todayDay);
   return { created: created.map((e) => serialize(e, categories, rate)) };
 });
@@ -383,6 +432,11 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   const updated = await expenseById(id);
   const rate = await baseRate(user, today());
 
+  if (updated) {
+    const card = await buildCard(user, ledgerId, updated);
+    await updateCard(BOT_TOKEN, id, cardText(card)).catch(() => undefined);
+  }
+
   return { expense: updated ? serialize(updated, categories, rate) : null };
 });
 
@@ -399,30 +453,10 @@ app.delete("/api/expenses/:id", async (request, reply) => {
 
   // Карточка этой траты в чате должна исчезнуть вместе с ней: иначе в боте
   // остаётся сообщение о трате, которой уже нет.
-  await removeExpenseCards(id).catch(() => undefined);
+  await removeCards(BOT_TOKEN, id).catch(() => undefined);
 
   return { ok: true };
 });
-
-/** Удаляет из чата карточки бота, привязанные к трате. */
-async function removeExpenseCards(expenseId: number): Promise<void> {
-  const cards = await db.query.botMessages.findMany({
-    where: and(eq(schema.botMessages.expenseId, expenseId), isNull(schema.botMessages.cleanedAt)),
-  });
-
-  for (const card of cards) {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: card.chatId, message_id: card.messageId }),
-    }).catch(() => undefined);
-
-    await db
-      .update(schema.botMessages)
-      .set({ cleanedAt: new Date() })
-      .where(eq(schema.botMessages.id, card.id));
-  }
-}
 
 app.get("/api/analytics", async (request) => {
   const query = z

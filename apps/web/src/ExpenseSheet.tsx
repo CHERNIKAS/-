@@ -113,27 +113,6 @@ export function ExpenseSheet({
       >
         <div className="grabber" />
 
-        <button
-          onClick={onClose}
-          aria-label="Закрыть"
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 14,
-            width: 32,
-            height: 32,
-            borderRadius: 999,
-            background: "rgba(255,255,255,.12)",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 16,
-            lineHeight: 1,
-            color: "var(--ink-2)",
-          }}
-        >
-          ✕
-        </button>
-
 
         {error !== null && (
           <div className="err" style={{ marginBottom: 14 }}>
@@ -165,27 +144,29 @@ export function ExpenseSheet({
         <p className="label" style={{ marginBottom: 8 }}>
           Сумма
         </p>
-        <div className="row" style={{ marginBottom: 18 }}>
-          <input
-            className="field"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
-          />
-          <div className="chips">
-            {CURRENCIES.map((code) => (
-              <button
-                key={code}
-                className={code === currency ? "pill on" : "pill ghost"}
-                onClick={() => {
-                  tap();
-                  setCurrency(code);
-                }}
-              >
-                {code}
-              </button>
-            ))}
-          </div>
+        <input
+          className="field"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
+          style={{ marginBottom: 10 }}
+        />
+
+        {/* Валюты отдельной строкой: рядом с полем они не помещались и
+            растягивали шторку вширь, унося вбок весь экран. */}
+        <div className="scroller equal" style={{ marginBottom: 18 }}>
+          {CURRENCIES.map((code) => (
+            <button
+              key={code}
+              className={code === currency ? "pill on" : "pill ghost"}
+              onClick={() => {
+                tap();
+                setCurrency(code);
+              }}
+            >
+              {code}
+            </button>
+          ))}
         </div>
 
         <p className="label" style={{ marginBottom: 8 }}>
@@ -219,7 +200,7 @@ export function ExpenseSheet({
         <p className="label" style={{ marginBottom: 8 }}>
           Оплата
         </p>
-        <div className="chips" style={{ marginBottom: 18 }}>
+        <div className="scroller equal" style={{ marginBottom: 18 }}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}

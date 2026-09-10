@@ -80,6 +80,8 @@ const MAPPING: Mapping = {
   descriptionColumn: 2,
   creditColumn: null,
   currencyColumn: null,
+  statusColumn: null,
+  okStatuses: [],
   dateOrder: "dmy",
   decimalSeparator: ",",
   expenseIsNegative: true,
@@ -123,6 +125,29 @@ describe("applyMapping", () => {
 
   it("валюта берётся из карты, если в файле её нет", () => {
     expect(applyMapping(sheet, MAPPING, TODAY).rows[0]?.currency).toBe("TRY");
+  });
+
+  it("отменённые операции не становятся тратами", () => {
+    const withStatus = [
+      ["Дата", "Сумма", "Описание", "Статус"],
+      ["03.09.2026", "-1 500,00", "MIGROS", "DONE"],
+      ["04.09.2026", "-120,50", "STARBUCKS", "CANCELED"],
+      ["05.09.2026", "-80,00", "BIM", "PENDING"],
+    ];
+
+    const result = applyMapping(
+      withStatus,
+      { ...MAPPING, statusColumn: 3, okStatuses: ["DONE"] },
+      TODAY,
+    );
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.description).toBe("MIGROS");
+    expect(result.cancelled).toBe(2);
+  });
+
+  it("без колонки статуса ничего не отбрасывается", () => {
+    expect(applyMapping(sheet, MAPPING, TODAY).cancelled).toBe(0);
   });
 
   it("приход в отдельной колонке не попадает в траты", () => {
