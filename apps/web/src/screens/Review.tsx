@@ -29,21 +29,21 @@ export function Review({
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .review()
-      .then((result) => {
-        setGroups(result.groups);
+  async function load() {
+    const result = await api.review();
+    setGroups(result.groups);
 
-        // Предзаполняем тем, что определил разбор: чаще всего это и есть ответ,
-        // а человеку остаётся поправить исключения.
-        const start: Record<number, string> = {};
-        for (const group of result.groups) {
-          for (const item of group.items) start[item.id] = item.kind;
-        }
-        setChoice(start);
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Не загрузилось"));
+    // Предзаполняем тем, что определил разбор: чаще всего это и есть ответ,
+    // а человеку остаётся поправить исключения.
+    const start: Record<number, string> = {};
+    for (const group of result.groups) {
+      for (const item of group.items) start[item.id] = item.kind;
+    }
+    setChoice(start);
+  }
+
+  useEffect(() => {
+    load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Не загрузилось"));
   }, []);
 
   async function save() {
@@ -52,6 +52,10 @@ export function Review({
     try {
       await api.saveReview(Object.entries(choice).map(([id, kind]) => ({ id: Number(id), kind })));
       notify("success");
+
+      // Список перечитывается здесь же: разобранное должно исчезнуть сразу,
+      // иначе кнопка выглядит нажатой впустую и её жмут снова.
+      await load();
       onDone();
     } catch (e) {
       notify("error");
