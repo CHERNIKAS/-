@@ -1,6 +1,6 @@
 import type { Currency } from "../index.js";
 import { CURRENCIES } from "../index.js";
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, lte } from "drizzle-orm";
 import { db, schema } from "./db.js";
 
 /**
@@ -35,6 +35,15 @@ export async function rateToUsd(currency: Currency, day: string): Promise<number
     orderBy: desc(schema.rates.day),
   });
   if (previous) return Number(previous.toUsd);
+
+  // Выписка бывает старше самого учёта: тогда курса раньше траты нет вовсе.
+  // Самый ранний известный ближе к правде, чем сегодняшний, и, что важнее, не
+  // заставляет лезть в сеть на каждую строку файла.
+  const earliest = await db.query.rates.findFirst({
+    where: eq(schema.rates.currency, currency),
+    orderBy: asc(schema.rates.day),
+  });
+  if (earliest) return Number(earliest.toUsd);
 
   const fetched = await refreshRates();
   return fetched[currency] ?? 1;

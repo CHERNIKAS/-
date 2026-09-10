@@ -971,13 +971,13 @@ app.patch("/api/recurring/:id", async (request) => {
   const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
   const { active } = z.object({ active: z.boolean() }).parse(request.body);
 
-  await setRecurringActive(id, active);
+  await setRecurringActive(request.ledgerId, id, active);
   return { ok: true };
 });
 
 app.delete("/api/recurring/:id", async (request) => {
   const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
-  await deleteRecurring(id);
+  await deleteRecurring(request.ledgerId, id);
   return { ok: true };
 });
 

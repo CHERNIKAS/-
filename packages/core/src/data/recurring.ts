@@ -45,12 +45,25 @@ export async function createRecurring(values: {
   return row;
 }
 
-export async function setRecurringActive(id: number, active: boolean): Promise<void> {
-  await db.update(schema.recurring).set({ active }).where(eq(schema.recurring.id, id));
+/**
+ * Книга в условии не для красоты: номер платежа приходит из запроса, и без
+ * этой проверки чужой регулярный платёж выключался бы подбором номера.
+ */
+export async function setRecurringActive(
+  ledgerId: number,
+  id: number,
+  active: boolean,
+): Promise<void> {
+  await db
+    .update(schema.recurring)
+    .set({ active })
+    .where(and(eq(schema.recurring.id, id), eq(schema.recurring.ledgerId, ledgerId)));
 }
 
-export async function deleteRecurring(id: number): Promise<void> {
-  await db.delete(schema.recurring).where(eq(schema.recurring.id, id));
+export async function deleteRecurring(ledgerId: number, id: number): Promise<void> {
+  await db
+    .delete(schema.recurring)
+    .where(and(eq(schema.recurring.id, id), eq(schema.recurring.ledgerId, ledgerId)));
 }
 
 /**
