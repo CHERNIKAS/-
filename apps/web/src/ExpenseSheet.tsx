@@ -260,9 +260,12 @@ export function ExpenseSheet({
             </button>
           </div>
         ) : (
+          // Удаление — сдержанной ссылкой, а не второй большой кнопкой:
+          // рядом с «Сохранить» она весила столько же и добавляла карточке
+          // высоты ровно там, где её не хватало.
           <button
-            className="cta"
-            style={{ marginTop: 10, background: "transparent", color: "var(--ink-3)" }}
+            className="linky"
+            style={{ display: "block", width: "100%", marginTop: 10, textAlign: "center" }}
             onClick={() => {
               tap();
               setConfirmDelete(true);
