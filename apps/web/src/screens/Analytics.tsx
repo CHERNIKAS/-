@@ -3,7 +3,17 @@ import { useEffect, useState } from "react";
 import { type Analytics as Data, api } from "../api.js";
 import { money, moneyExact } from "../format.js";
 import { CategoryIcon } from "../icons.js";
+import { tap } from "../telegram.js";
 import { tint } from "../palette.js";
+
+const CURRENCY_NAME: Record<string, string> = {
+  USD: "Доллар",
+  EUR: "Евро",
+  UAH: "Гривна",
+  TRY: "Лира",
+};
+
+const CURRENCY_SIGN: Record<string, string> = { USD: "$", EUR: "€", UAH: "₴", TRY: "₺" };
 import { PeriodPicker } from "../PeriodPicker.js";
 import { type Range, rangeFor, rangeTitle } from "../periods.js";
 
@@ -16,6 +26,7 @@ import { type Range, rangeFor, rangeTitle } from "../periods.js";
  */
 export function Analytics({ currency, today }: { currency: string; today: string }) {
   const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
+  const [mode, setMode] = useState<"categories" | "currencies">("categories");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,12 +50,42 @@ export function Analytics({ currency, today }: { currency: string; today: string
 
   const categories = data?.categories ?? [];
   const total = data?.total ?? 0;
+  const currencies = data?.byCurrency ?? [];
+
+  // Кольцо одно и то же, меняется только то, по чему оно режет.
+  const slices =
+    mode === "categories"
+      ? categories.map((c) => ({ label: c.title, value: c.total }))
+      : currencies.map((c) => ({ label: c.currency, value: c.base }));
 
   return (
     <>
-      <div style={{ padding: "12px 0 22px" }}>
+      <div style={{ padding: "12px 0 14px" }}>
         <PeriodPicker today={today} range={range} onChange={setRange} />
       </div>
+
+      {currencies.length > 1 && (
+        <div className="chips" style={{ marginBottom: 20 }}>
+          <button
+            className={mode === "categories" ? "pill on" : "pill ghost"}
+            onClick={() => {
+              tap();
+              setMode("categories");
+            }}
+          >
+            Категории
+          </button>
+          <button
+            className={mode === "currencies" ? "pill on" : "pill ghost"}
+            onClick={() => {
+              tap();
+              setMode("currencies");
+            }}
+          >
+            Валюты
+          </button>
+        </div>
+      )}
 
       {error !== null && <div className="err">{error}</div>}
       {data === null && error === null && <p className="spinner">Считаю…</p>}
@@ -61,9 +102,9 @@ export function Analytics({ currency, today }: { currency: string; today: string
             style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}
             dangerouslySetInnerHTML={{
               __html: donutSvg(
-                categories.map((c, i) => ({
-                  label: c.title,
-                  value: c.total,
+                slices.map((s, i) => ({
+                  label: s.label,
+                  value: s.value,
                   color: PALETTE[i % PALETTE.length] as string,
                 })),
                 {
@@ -78,54 +119,66 @@ export function Analytics({ currency, today }: { currency: string; today: string
           />
 
           <p className="label" style={{ margin: "0 2px 10px" }}>
-            По категориям
+            {mode === "categories" ? "По категориям" : "В каких валютах"}
           </p>
 
           <div className="card rows" style={{ padding: "2px 16px" }}>
-            {categories.map((c, i) => {
-              const color = PALETTE[i % PALETTE.length] as string;
-              const share = total === 0 ? 0 : c.total / total;
+            {mode === "categories"
+              ? categories.map((c, i) => {
+                  const color = PALETTE[i % PALETTE.length] as string;
+                  const share = total === 0 ? 0 : c.total / total;
 
-              return (
-                <div key={c.slug} className="item">
-                  <span
-                    className="tile"
-                    style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
-                  >
-                    <CategoryIcon slug={c.slug} />
-                  </span>
-                  <span className="grow">
-                    <span className="title">{c.title}</span>
-                    <span className="bar" style={{ marginTop: 7 }}>
-                      <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
-                    </span>
-                  </span>
-                  <span className="amount">
-                    {money(c.total, data.currency)}
-                    <span className="sub" style={{ display: "block" }}>
-                      {Math.round(share * 100)}%
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
+                  return (
+                    <div key={c.slug} className="item">
+                      <span
+                        className="tile"
+                        style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
+                      >
+                        <CategoryIcon slug={c.slug} />
+                      </span>
+                      <span className="grow">
+                        <span className="title">{c.title}</span>
+                        <span className="bar" style={{ marginTop: 7 }}>
+                          <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
+                        </span>
+                      </span>
+                      <span className="amount">
+                        {money(c.total, data.currency)}
+                        <span className="sub">{Math.round(share * 100)}%</span>
+                      </span>
+                    </div>
+                  );
+                })
+              : currencies.map((c, i) => {
+                  const color = PALETTE[i % PALETTE.length] as string;
+                  const share = total === 0 ? 0 : c.base / total;
+
+                  return (
+                    <div key={c.currency} className="item">
+                      <span
+                        className="tile"
+                        style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
+                      >
+                        {CURRENCY_SIGN[c.currency] ?? c.currency}
+                      </span>
+                      <span className="grow">
+                        <span className="title">{CURRENCY_NAME[c.currency] ?? c.currency}</span>
+                        <span className="bar" style={{ marginTop: 7 }}>
+                          <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
+                        </span>
+                      </span>
+                      <span className="amount">
+                        {moneyExact(c.amount, c.currency)}
+                        <span className="sub">
+                          {c.currency === data.currency
+                            ? `${Math.round(share * 100)}%`
+                            : `≈ ${money(c.base, data.currency)} · ${Math.round(share * 100)}%`}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
           </div>
-
-          {data.byCurrency.length > 1 && (
-            <>
-              <p className="label" style={{ margin: "22px 2px 10px" }}>
-                Как вносил
-              </p>
-              <div className="card rows" style={{ padding: "2px 16px" }}>
-                {data.byCurrency.map((c) => (
-                  <div key={c.currency} className="item">
-                    <span className="grow title num">{moneyExact(c.amount, c.currency)}</span>
-                    <span className="amount dim">≈ {money(c.base, currency)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
         </>
       )}
     </>

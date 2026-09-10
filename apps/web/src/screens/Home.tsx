@@ -1,6 +1,7 @@
 import type { Expense, State } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
 import { SwipeRow } from "../SwipeRow.js";
+import { PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 
@@ -27,6 +28,11 @@ export function Home({
   const left = budget === null ? null : budget - totals.month;
   const progress = budget === null || budget === 0 ? 0 : Math.min(1, totals.month / budget);
   const dayOfMonth = Number(today.slice(8, 10));
+
+  // Полоска показывается только при нескольких валютах: при одной она
+  // повторяла бы сумму месяца и занимала место зря.
+  const currencies = state.currencies.filter((c) => c.base > 0);
+  const currencyTotal = currencies.reduce((sum, c) => sum + c.base, 0);
   const perDay = totals.month / Math.max(1, dayOfMonth);
 
   return (
@@ -48,6 +54,42 @@ export function Home({
         Потрачено
       </p>
       <p className="h1">{money(totals.month, user.currency)}</p>
+
+      {currencies.length > 1 && currencyTotal > 0 && (
+        <div style={{ margin: "16px 0 0" }}>
+          <div style={{ display: "flex", gap: 3 }}>
+            {currencies.map((c, i) => (
+              <span
+                key={c.currency}
+                style={{
+                  flex: c.base / currencyTotal,
+                  height: 6,
+                  borderRadius: 99,
+                  background: PALETTE[i % PALETTE.length],
+                }}
+              />
+            ))}
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 10 }}>
+            {currencies.map((c, i) => (
+              <span key={c.currency} className="num" style={{ fontSize: 13 }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 8,
+                    height: 8,
+                    borderRadius: 2,
+                    marginRight: 6,
+                    background: PALETTE[i % PALETTE.length],
+                  }}
+                />
+                {moneyExact(c.amount, c.currency)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {budget !== null && left !== null && (
         <>

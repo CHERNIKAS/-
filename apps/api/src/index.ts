@@ -102,10 +102,19 @@ app.get("/api/state", async (request) => {
   const todayDay = today();
   const rate = await baseRate(user, todayDay);
 
-  const [categories, dayUsd, monthUsd] = await Promise.all([
+  const monthPeriod = {
+    from: `${todayDay.slice(0, 7)}-01`,
+    to: todayDay,
+    label: "месяц",
+  };
+
+  const [categories, dayUsd, monthUsd, currencies] = await Promise.all([
     listCategories(ledgerId),
     totalSince(ledgerId, todayDay),
-    totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`),
+    totalSince(ledgerId, monthPeriod.from),
+    // Разбивка по валютам за месяц: на главной интересна сумма именно в той
+    // валюте, в которой платил, а не только общий пересчёт.
+    byCurrency(ledgerId, monthPeriod),
   ]);
 
   const recent = await db.query.expenses.findMany({
@@ -128,6 +137,11 @@ app.get("/api/state", async (request) => {
     today: todayDay,
     sharedActive: user.activeLedgerId !== null,
     totals: { day: dayUsd / rate, month: monthUsd / rate },
+    currencies: currencies.map((c) => ({
+      currency: c.currency,
+      amount: c.amount,
+      base: c.totalUsd / rate,
+    })),
     categories: categories.map((c) => ({
       slug: c.slug,
       title: c.title,

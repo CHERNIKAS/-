@@ -52,6 +52,7 @@ export type State = {
   today: string;
   sharedActive: boolean;
   totals: { day: number; month: number };
+  currencies: { currency: string; amount: number; base: number }[];
   categories: Category[];
   recent: Expense[];
 };
