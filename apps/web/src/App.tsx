@@ -22,6 +22,23 @@ import { useSheetDrag } from "./useSheetDrag.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
 
+type Section = "settings" | "categories" | "recurring" | "shared" | "balance" | "review";
+
+/**
+ * Разделы «Ещё».
+ *
+ * Подпись у каждого не для красоты: по названию «Общий» невозможно понять, что
+ * это общий бюджет с кем-то, а не общие настройки.
+ */
+const SECTIONS: { key: Section; title: string; hint: string }[] = [
+  { key: "settings", title: "Основное", hint: "валюта, напоминания, бюджет, часовой пояс" },
+  { key: "categories", title: "Категории", hint: "категории расходов и источники дохода" },
+  { key: "balance", title: "Баланс", hint: "сколько денег есть сейчас" },
+  { key: "recurring", title: "Регулярные", hint: "подписки и платежи, которые повторяются" },
+  { key: "shared", title: "Общий бюджет", hint: "книга на несколько человек" },
+  { key: "review", title: "Разбор", hint: "приходы и переводы, ждущие ответа" },
+];
+
 const CURRENCIES = [
   { code: "USD", symbol: "$", title: "Доллар" },
   { code: "EUR", symbol: "€", title: "Евро" },
@@ -37,9 +54,8 @@ export function App() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [pickingBook, setPickingBook] = useState(false);
-  const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared" | "review" | "balance">(
-    "settings",
-  );
+  /** Пусто — открыт список разделов, иначе сам раздел. */
+  const [more, setMore] = useState<Section | null>(null);
   /**
    * Куда смотреть истории при переходе из разбора.
    *
@@ -64,6 +80,13 @@ export function App() {
    * Провалившись из разбора в категорию, человек оказывается в истории с
    * чужим фильтром, и выйти оттуда было нечем: снизу вкладки, сверху ничего.
    */
+  // Из раздела «Ещё» назад ведёт к списку разделов, а не наружу.
+  useEffect(() => {
+    if (tab !== "settings" || more === null) return;
+
+    return backButton(true, () => setMore(null));
+  }, [tab, more]);
+
   useEffect(() => {
     if (!fromStats || tab !== "history") return;
 
@@ -174,29 +197,59 @@ export function App() {
       )}
       {tab === "settings" && (
         <>
-          <div className="scroller equal" style={{ padding: "12px 0 18px" }}>
-            {(
-              [
-                ["settings", "Основное"],
-                ["categories", "Категории"],
-                ["recurring", "Регулярные"],
-                ["shared", "Общий"],
-                ["balance", "Баланс"],
-                ["review", "Разбор"],
-              ] as const
-            ).map(([key, title]) => (
-              <button
-                key={key}
-                className={more === key ? "pill on" : "pill ghost"}
-                onClick={() => {
-                  tap();
-                  setMore(key);
-                }}
-              >
-                {title}
-              </button>
-            ))}
-          </div>
+          {/* Разделы списком, а не рядом пилюль: их уже шесть, и в строку они
+              не помещаются — названия налезали друг на друга. Список растёт
+              спокойно и читается с одного взгляда. */}
+          {more === null && (
+            <>
+              <p className="label" style={{ margin: "12px 2px 12px" }}>
+                Ещё
+              </p>
+
+              <div className="card rows" style={{ padding: "2px 16px" }}>
+                {SECTIONS.filter(
+                  // Разбор появляется, только когда есть что разбирать: пустой
+                  // раздел, в который нельзя зайти по своей воле, — это мусор.
+                  (section) => section.key !== "review" || state.needsReview > 0,
+                ).map((section) => (
+                  <button
+                    key={section.key}
+                    className="item"
+                    onClick={() => {
+                      tap();
+                      setMore(section.key);
+                    }}
+                  >
+                    <span className="grow">
+                      <span className="title">{section.title}</span>
+                      <span className="sub">{section.hint}</span>
+                    </span>
+                    {section.key === "review" && (
+                      <span className="pill on" style={{ minHeight: 26 }}>
+                        {state.needsReview}
+                      </span>
+                    )}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m9 6 6 6-6 6" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {more !== null && (
+            <button
+              className="linky"
+              style={{ display: "block", margin: "12px 2px 6px" }}
+              onClick={() => {
+                tap();
+                setMore(null);
+              }}
+            >
+              ← {SECTIONS.find((s) => s.key === more)?.title ?? "Назад"}
+            </button>
+          )}
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
           {more === "balance" && (
