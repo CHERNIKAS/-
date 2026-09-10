@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ReviewGroup } from "../api.js";
-import { dayTitle, moneyExact } from "../format.js";
+import { dayTitle, money, moneyExact } from "../format.js";
 import { notify, tap } from "../telegram.js";
 
 /**
@@ -14,10 +14,19 @@ import { notify, tap } from "../telegram.js";
  * а наказание. Здесь всё видно разом, решения ставятся галочками и уходят одной
  * кнопкой.
  */
-export function Review({ currency, onDone }: { currency: string; onDone: () => void }) {
+export function Review({
+  currency,
+  today,
+  onDone,
+}: {
+  currency: string;
+  today: string;
+  onDone: () => void;
+}) {
   const [groups, setGroups] = useState<ReviewGroup[] | null>(null);
   const [choice, setChoice] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,69 +92,100 @@ export function Review({ currency, onDone }: { currency: string; onDone: () => v
         </div>
       )}
 
-      {groups?.map((group) => (
-        <div key={group.counterparty} style={{ marginBottom: 18 }}>
-          <div className="between" style={{ margin: "0 2px 8px", gap: 10 }}>
-            <span className="label" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-              {shorten(group.counterparty)}
-            </span>
-            <span className="dim">{group.count}</span>
-          </div>
+      {groups?.map((group) => {
+        const incoming = group.items[0]?.incoming === true;
+        const sum = group.items.reduce((acc, item) => acc + item.base, 0);
+        const days = group.items.map((item) => item.spentAt).sort();
+        const decided = group.items.filter((item) => choice[item.id] !== undefined);
+        const mine = decided.filter((item) => choice[item.id] === "transfer").length;
+        const expanded = open === group.counterparty;
 
-          <div className="chips" style={{ marginBottom: 8 }}>
-            <button className="pill ghost" onClick={() => markGroup(group, "transfer")}>
-              все мои
-            </button>
-            <button
-              className="pill ghost"
-              onClick={() => markGroup(group, group.items[0]?.incoming === true ? "income" : "expense")}
-            >
-              {group.items[0]?.incoming === true ? "все доход" : "все расход"}
-            </button>
-          </div>
-
-          <div className="card rows" style={{ padding: "2px 16px" }}>
-            {group.items.map((item) => (
-              <div key={item.id} className="item">
+        return (
+          <div key={group.counterparty} style={{ marginBottom: 14 }}>
+            <div className="card" style={{ padding: "12px 16px" }}>
+              <button
+                className="item"
+                style={{ padding: 0 }}
+                onClick={() => {
+                  tap();
+                  setOpen(expanded ? null : group.counterparty);
+                }}
+              >
                 <span className="grow">
-                  <span className="title">
-                    {item.incoming ? "+" : "−"}
-                    {moneyExact(item.amount, item.currency)}
-                  </span>
+                  <span className="title">{shorten(group.counterparty)}</span>
                   <span className="sub">
-                    {dayTitle(item.spentAt, item.spentAt)}
-                    {item.currency === currency ? "" : ` · ≈ ${moneyExact(item.base, currency)}`}
+                    {group.count} операций · {money(sum, currency)} ·{" "}
+                    {days[0] === days[days.length - 1]
+                      ? dayTitle(days[0] ?? today, today)
+                      : `${dayTitle(days[0] ?? today, today)} — ${dayTitle(days[days.length - 1] ?? today, today)}`}
                   </span>
                 </span>
-
-                <span className="seg" style={{ width: 168 }}>
-                  <button
-                    className={choice[item.id] === "transfer" ? "on" : ""}
-                    onClick={() => {
-                      tap();
-                      setChoice((c) => ({ ...c, [item.id]: "transfer" }));
-                    }}
-                  >
-                    мои
-                  </button>
-                  <button
-                    className={choice[item.id] !== "transfer" ? "on" : ""}
-                    onClick={() => {
-                      tap();
-                      setChoice((c) => ({
-                        ...c,
-                        [item.id]: item.incoming ? "income" : "expense",
-                      }));
-                    }}
-                  >
-                    {item.incoming ? "доход" : "расход"}
-                  </button>
+                <span className="dim" style={{ fontSize: 13 }}>
+                  {mine === group.count ? "мои" : mine === 0 ? (incoming ? "доход" : "расход") : "×"}
                 </span>
+              </button>
+
+              {/* Решение принимается по группе: у одного адреса их бывают сотни,
+                  и щёлкать каждую — это час работы вместо минуты. Развернуть и
+                  поправить отдельные всё равно можно. */}
+              <div className="seg" style={{ marginTop: 10 }}>
+                <button
+                  className={mine === group.count ? "on" : ""}
+                  onClick={() => markGroup(group, "transfer")}
+                >
+                  мои деньги
+                </button>
+                <button
+                  className={mine === 0 ? "on" : ""}
+                  onClick={() => markGroup(group, incoming ? "income" : "expense")}
+                >
+                  {incoming ? "доход" : "расход"}
+                </button>
               </div>
-            ))}
+            </div>
+
+            {expanded && (
+              <div className="card rows" style={{ padding: "2px 16px", marginTop: 8 }}>
+                {group.items.map((item) => (
+                  <div key={item.id} className="item dense">
+                    <span className="grow">
+                      <span className="title">
+                        {item.incoming ? "+" : "−"}
+                        {moneyExact(item.amount, item.currency)}
+                      </span>
+                      <span className="sub">{dayTitle(item.spentAt, today)}</span>
+                    </span>
+
+                    <span className="seg" style={{ width: 150 }}>
+                      <button
+                        className={choice[item.id] === "transfer" ? "on" : ""}
+                        onClick={() => {
+                          tap();
+                          setChoice((c) => ({ ...c, [item.id]: "transfer" }));
+                        }}
+                      >
+                        мои
+                      </button>
+                      <button
+                        className={choice[item.id] !== "transfer" ? "on" : ""}
+                        onClick={() => {
+                          tap();
+                          setChoice((c) => ({
+                            ...c,
+                            [item.id]: item.incoming ? "income" : "expense",
+                          }));
+                        }}
+                      >
+                        {item.incoming ? "доход" : "расход"}
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {total > 0 && (
         <button className="cta mint" disabled={busy} onClick={() => void save()}>

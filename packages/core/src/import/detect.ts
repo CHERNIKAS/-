@@ -148,8 +148,10 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
 
     const raw = JSON.parse(text) as Record<string, unknown>;
 
+    const skipRows = num(raw["skipRows"], 0);
+
     return {
-      skipRows: num(raw["skipRows"], 0),
+      skipRows,
       dateColumn: num(raw["dateColumn"], 0),
       amountColumn: num(raw["amountColumn"], 1),
       descriptionColumn: num(raw["descriptionColumn"], 2),
@@ -157,8 +159,12 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
       currencyColumn: raw["currencyColumn"] === null ? null : num(raw["currencyColumn"], -1),
       statusColumn: raw["statusColumn"] === null ? null : num(raw["statusColumn"], -1),
       typeColumn: raw["typeColumn"] === null ? null : num(raw["typeColumn"], -1),
+      // Модель то находит колонку с адресом, то нет, а от неё зависит, сможем
+      // ли мы вообще спросить «чьи это деньги». Не нашла — ищем сами.
       counterpartyColumn:
-        raw["counterpartyColumn"] === null ? null : num(raw["counterpartyColumn"], -1),
+        raw["counterpartyColumn"] === null
+          ? guessCounterpartyColumn(rows, skipRows)
+          : num(raw["counterpartyColumn"], -1),
       okStatuses: Array.isArray(raw["okStatuses"])
         ? (raw["okStatuses"] as unknown[]).filter((v): v is string => typeof v === "string")
         : [],
@@ -182,4 +188,35 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
 
 function num(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback;
+}
+
+/**
+ * Колонка второй стороны, если модель её не заметила.
+ *
+ * Адреса кошельков и номера счетов узнаются по виду: длинная строка без
+ * пробелов из букв и цифр. Полагаться тут на модель нельзя — она то находит
+ * колонку, то нет, а от неё зависит, сможем ли мы вообще спросить «чьи это
+ * деньги» по конкретному адресу.
+ */
+export function guessCounterpartyColumn(rows: Sheet, skipRows: number): number | null {
+  const body = rows.slice(Math.max(0, skipRows), Math.max(0, skipRows) + 60);
+  if (body.length === 0) return null;
+
+  const width = Math.max(...body.map((r) => r.length));
+  let best: { index: number; hits: number } | null = null;
+
+  for (let column = 0; column < width; column++) {
+    let hits = 0;
+
+    for (const row of body) {
+      const cell = (row[column] ?? "").trim();
+      // Адрес: не короче двадцати знаков, без пробелов, только буквы и цифры.
+      if (cell.length >= 20 && /^[A-Za-z0-9_:-]+$/.test(cell)) hits++;
+    }
+
+    if (hits > 0 && (best === null || hits > best.hits)) best = { index: column, hits };
+  }
+
+  // Единичное совпадение — это случайность, а не колонка.
+  return best !== null && best.hits >= 3 ? best.index : null;
 }

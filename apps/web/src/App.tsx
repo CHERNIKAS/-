@@ -203,7 +203,11 @@ export function App() {
             <Balance currency={state.user.currency} today={state.today} />
           )}
           {more === "review" && (
-            <Review currency={state.user.currency} onDone={() => void reload()} />
+            <Review
+              currency={state.user.currency}
+              today={state.today}
+              onDone={() => void reload()}
+            />
           )}
           {more === "categories" && (
             <Categories
