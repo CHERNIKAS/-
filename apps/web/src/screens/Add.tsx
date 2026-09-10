@@ -91,28 +91,7 @@ export function Add({
       >
         <div className="grabber" />
 
-        <button
-          onClick={onClose}
-          aria-label="Закрыть"
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 14,
-            width: 32,
-            height: 32,
-            borderRadius: 999,
-            background: "rgba(255,255,255,.12)",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 16,
-            lineHeight: 1,
-            color: "var(--ink-2)",
-          }}
-        >
-          ✕
-        </button>
-
-        <div className="between" style={{ marginBottom: 14, paddingRight: 40 }}>
+        <div className="between" style={{ marginBottom: 14 }}>
           <span className="label">Новая трата</span>
           <button
             className="pill"

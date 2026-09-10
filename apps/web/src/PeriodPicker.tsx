@@ -1,7 +1,9 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { IconCalendar } from "./icons.js";
 import { PERIODS, type PeriodKey, type Range, rangeFor, rangeTitle } from "./periods.js";
 import { tap } from "./telegram.js";
+import { useBodyLock } from "./useBodyLock.js";
+import { useSheetDrag } from "./useSheetDrag.js";
 
 /**
  * Выбор периода.
@@ -25,6 +27,10 @@ export function PeriodPicker({
   const [editing, setEditing] = useState(false);
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
+
+  const close = useCallback(() => setEditing(false), []);
+  const drag = useSheetDrag(close);
+  useBodyLock(editing);
 
   function choose(key: PeriodKey) {
     tap();
@@ -64,8 +70,8 @@ export function PeriodPicker({
       {extra !== undefined && <div style={{ marginTop: 10 }}>{extra}</div>}
 
       {editing && (
-        <div className="sheet short" onClick={() => setEditing(false)}>
-          <div onClick={(e) => e.stopPropagation()}>
+        <div className="sheet short" onClick={close}>
+          <div ref={drag.ref} onClick={(e) => e.stopPropagation()} style={drag.sheetStyle}>
             <div className="grabber" />
             <p className="label" style={{ marginBottom: 14 }}>
               Свой период

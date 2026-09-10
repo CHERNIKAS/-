@@ -13,6 +13,8 @@ import { Settings } from "./screens/Settings.js";
 import { Shared } from "./screens/Shared.js";
 import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
 import { notify, tap } from "./telegram.js";
+import { useBodyLock } from "./useBodyLock.js";
+import { useSheetDrag } from "./useSheetDrag.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
 
@@ -31,6 +33,10 @@ export function App() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared">("settings");
+
+  const closeCurrency = useCallback(() => setPickingCurrency(false), []);
+  const currencyDrag = useSheetDrag(closeCurrency);
+  useBodyLock(pickingCurrency);
 
   // Смахнутая строка ждёт подтверждения: reset вернёт её на место при отказе.
   const [pending, setPending] = useState<{
@@ -214,8 +220,12 @@ export function App() {
       </nav>
 
       {pickingCurrency && (
-        <div className="sheet short" onClick={() => setPickingCurrency(false)}>
-          <div onClick={(e) => e.stopPropagation()}>
+        <div className="sheet short" onClick={closeCurrency}>
+          <div
+            ref={currencyDrag.ref}
+            onClick={(e) => e.stopPropagation()}
+            style={currencyDrag.sheetStyle}
+          >
             <div className="grabber" />
             <p className="label" style={{ marginBottom: 6 }}>
               Показывать всё в
