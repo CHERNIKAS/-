@@ -99,7 +99,7 @@ export async function sendAnalytics(
   ctx: Context,
   user: AppUser,
   ledgerId: number,
-  key: PeriodKey = "d30",
+  key: PeriodKey = "month",
 ): Promise<void> {
   const { png, caption } = await render(user, ledgerId, key);
 

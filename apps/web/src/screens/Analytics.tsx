@@ -25,7 +25,7 @@ import { type Range, rangeFor, rangeTitle } from "../periods.js";
  * список под кольцом — там и суммы, и доли.
  */
 export function Analytics({ currency, today }: { currency: string; today: string }) {
-  const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
+  const [range, setRange] = useState<Range>(() => rangeFor("month", today));
   const [mode, setMode] = useState<"categories" | "currencies">("categories");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);

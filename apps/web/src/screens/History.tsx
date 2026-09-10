@@ -34,7 +34,7 @@ export function History({
 }) {
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [query, setQuery] = useState("");
-  const [range, setRange] = useState<Range>(() => rangeFor("d30", today));
+  const [range, setRange] = useState<Range>(() => rangeFor("month", today));
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [payment, setPayment] = useState<string | null>(null);

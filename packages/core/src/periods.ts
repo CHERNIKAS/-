@@ -1,13 +1,12 @@
 export type Period = { from: string; to: string; label: string };
 
 /** Периоды аналитики. Ключ уходит в callback_data, поэтому короткий. */
-export const PERIOD_KEYS = ["day", "week", "d30", "month", "year"] as const;
+export const PERIOD_KEYS = ["day", "week", "month", "year"] as const;
 export type PeriodKey = (typeof PERIOD_KEYS)[number];
 
 export const PERIOD_TITLE: Record<PeriodKey, string> = {
   day: "День",
   week: "Неделя",
-  d30: "30 дней",
   month: "Месяц",
   year: "Год",
 };
@@ -25,9 +24,6 @@ export function buildPeriod(key: PeriodKey, today: string): Period {
 
     case "week":
       return { from: shift(today, 6), to: today, label: "7 дней" };
-
-    case "d30":
-      return { from: shift(today, 29), to: today, label: "30 дней" };
 
     case "month":
       return { from: `${today.slice(0, 7)}-01`, to: today, label: "этот месяц" };

@@ -427,7 +427,7 @@ async function removeExpenseCards(expenseId: number): Promise<void> {
 app.get("/api/analytics", async (request) => {
   const query = z
     .object({
-      period: z.string().default("d30"),
+      period: z.string().default("month"),
       from: z.string().optional(),
       to: z.string().optional(),
     })
@@ -441,7 +441,7 @@ app.get("/api/analytics", async (request) => {
     query.from !== undefined && query.to !== undefined
       ? { from: query.from, to: query.to, label: `${query.from} — ${query.to}` }
       : buildPeriod(
-          (PERIOD_KEYS.includes(query.period as PeriodKey) ? query.period : "d30") as PeriodKey,
+          (PERIOD_KEYS.includes(query.period as PeriodKey) ? query.period : "month") as PeriodKey,
           todayDay,
         );
 
