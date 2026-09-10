@@ -282,7 +282,7 @@ svg {
 
 .field {
   width: 100%;
-  padding: 15px 16px;
+  padding: 13px 16px;
   font-size: 16px;
   font-family: inherit;
   border-radius: 16px;
@@ -295,6 +295,23 @@ svg {
 .field:focus {
   border-color: rgba(93, 224, 180, 0.55);
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* Поле даты iOS рисует по-своему: содержимое уезжает в центр, а высота
+   выходит больше остальных полей — строка выпадала из колонки. */
+.field[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  text-align: left;
+  min-height: 0;
+  height: 48px;
+  line-height: 22px;
+}
+
+.field[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
 }
 
 .field::placeholder {

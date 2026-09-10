@@ -11,7 +11,46 @@ export type ParsedEntry = {
   merchant: string;
   /** Строка без суммы разбирать нечего — трату не создаём. */
   ok: boolean;
+  /** Расход или доход. Доход отмечается плюсом или словом-источником. */
+  kind: "expense" | "income";
+  /** Откуда доход, если его удалось назвать: зарплата, фриланс, подарок. */
+  incomeSource: string | null;
+  /** Возврат — не доход: он гасит прошлую покупку. */
+  isRefund: boolean;
 };
+
+/**
+ * Слова, по которым строка читается как доход.
+ *
+ * Плюс впереди работает всегда, но писать «+» неудобно, а «зарплата 60000»
+ * человек напишет сам и ждёт, что это не станет тратой.
+ */
+const INCOME_WORDS: Record<string, string> = {
+  зарплата: "Зарплата",
+  зп: "Зарплата",
+  аванс: "Зарплата",
+  оклад: "Зарплата",
+  фриланс: "Фриланс",
+  гонорар: "Фриланс",
+  подработка: "Фриланс",
+  доход: "Доход",
+  приход: "Доход",
+  премия: "Премия",
+  подарили: "Подарок",
+  подарок: "Подарок",
+  продал: "Продажа",
+  продала: "Продажа",
+  кэшбек: "Кэшбек",
+  кешбек: "Кэшбек",
+  кэшбэк: "Кэшбек",
+};
+
+/** Возврат разбирается отдельно: он не доход, а отмена покупки. */
+const REFUND_WORDS = ["возврат", "вернули", "вернул", "вернула", "рефанд"];
+
+function word(needle: string): RegExp {
+  return new RegExp(`(?<![\\p{L}])${needle}(?![\\p{L}])`, "iu");
+}
 
 /**
  * Разделители между тратами в одном сообщении: перенос строки, точка с запятой,
@@ -77,8 +116,37 @@ export function parseEntry(raw: string): ParsedEntry {
   let rest = trimmed;
   let daysAgo = 0;
 
-  for (const [word, shift] of Object.entries(DATE_WORDS)) {
-    const re = new RegExp(`(?<![\\p{L}])${word}(?![\\p{L}])`, "iu");
+  // Плюс впереди — самый короткий способ сказать «это пришло, а не ушло».
+  let kind: "expense" | "income" = rest.startsWith("+") ? "income" : "expense";
+  if (rest.startsWith("+")) rest = rest.slice(1);
+
+  let isRefund = false;
+  for (const needle of REFUND_WORDS) {
+    const re = word(needle);
+    if (!re.test(rest)) continue;
+
+    isRefund = true;
+    kind = "income";
+    rest = rest.replace(re, " ");
+    break;
+  }
+
+  let incomeSource: string | null = isRefund ? "Возврат" : null;
+
+  if (!isRefund) {
+    for (const [needle, title] of Object.entries(INCOME_WORDS)) {
+      const re = word(needle);
+      if (!re.test(rest)) continue;
+
+      kind = "income";
+      incomeSource = title;
+      rest = rest.replace(re, " ");
+      break;
+    }
+  }
+
+  for (const [needle, shift] of Object.entries(DATE_WORDS)) {
+    const re = word(needle);
     if (re.test(rest)) {
       daysAgo = shift;
       rest = rest.replace(re, " ");
@@ -99,7 +167,7 @@ export function parseEntry(raw: string): ParsedEntry {
   if (currency === null) {
     for (const alias of ALL_ALIASES) {
       if (!/^[\p{L}]+$/u.test(alias)) continue;
-      const re = new RegExp(`(?<![\\p{L}])${alias}(?![\\p{L}])`, "iu");
+      const re = word(alias);
       if (re.test(rest)) {
         currency = matchCurrency(alias);
         rest = rest.replace(re, " ");
@@ -123,6 +191,11 @@ export function parseEntry(raw: string): ParsedEntry {
     daysAgo,
     merchant,
     ok: amount !== null && amount > 0,
+    kind,
+    // Доход без названного источника — просто «Доход»: пусто выглядело бы
+    // как недоразобранная строка.
+    incomeSource: kind === "income" && incomeSource === null ? "Доход" : incomeSource,
+    isRefund,
   };
 }
 

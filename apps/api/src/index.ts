@@ -13,7 +13,10 @@ import {
 } from "@costnote/core";
 import {
   type AppUser,
+  applyRefund,
   byCategory,
+  findRefundTarget,
+  incomeUsd,
   byCurrency,
   categoryBySlug,
   createExpense,
@@ -148,10 +151,12 @@ app.get("/api/state", async (request) => {
     label: "месяц",
   };
 
-  const [categories, dayUsd, monthUsd, currencies] = await Promise.all([
+  const [categories, dayUsd, monthUsd, monthIncome, currencies] = await Promise.all([
     listCategories(ledgerId),
     totalSince(ledgerId, todayDay),
     totalSince(ledgerId, monthPeriod.from),
+    // Доход отдельной строкой: в «Потрачено» он не входит, но видеть его надо.
+    incomeUsd(ledgerId, monthPeriod),
     // Разбивка по валютам за месяц: на главной интересна сумма именно в той
     // валюте, в которой платил, а не только общий пересчёт.
     byCurrency(ledgerId, monthPeriod),
@@ -176,7 +181,7 @@ app.get("/api/state", async (request) => {
     },
     today: todayDay,
     sharedActive: user.activeLedgerId !== null,
-    totals: { day: dayUsd / rate, month: monthUsd / rate },
+    totals: { day: dayUsd / rate, month: monthUsd / rate, income: monthIncome / rate },
     currencies: currencies.map((c) => ({
       currency: c.currency,
       amount: c.amount,
@@ -215,6 +220,11 @@ function serialize(
     confidence: expense.confidence === null ? null : Number(expense.confidence),
     source: expense.source,
     needsReview: expense.needsReview,
+    kind: expense.kind,
+    incomeSource: expense.incomeSource,
+    // Сколько по этой покупке вернули: строка показывает это отдельно, а из
+    // итогов сумма уже вычтена.
+    refunded: Number(expense.refundedAmount),
     category: category === null ? null : { slug: category.slug, title: category.title, emoji: category.emoji },
   };
 }
@@ -290,6 +300,9 @@ app.post("/api/expenses", async (request, reply) => {
             // Валюта из строки главнее выбранной в приложении: её написали явно.
             currency: (e.currency ?? body.currency ?? user.currency) as Currency,
             spentAt: shiftDay(todayDay, e.daysAgo),
+            kind: e.kind,
+            incomeSource: e.incomeSource,
+            isRefund: e.isRefund,
           }))
       : body.amount !== undefined
         ? [
@@ -299,6 +312,9 @@ app.post("/api/expenses", async (request, reply) => {
               amount: body.amount,
               currency: (body.currency ?? user.currency) as Currency,
               spentAt: body.spentAt ?? todayDay,
+              kind: "expense" as const,
+              incomeSource: null,
+              isRefund: false,
             },
           ]
         : [];
@@ -312,7 +328,41 @@ app.post("/api/expenses", async (request, reply) => {
   const corrections = await recentCorrections(user.id);
   const created = [];
 
+  let refunded = 0;
+
   for (const draft of drafts) {
+    // Возврат и доход разбираются так же, как в чате: правила одни, иначе одна
+    // и та же строка значила бы в двух местах разное.
+    if (draft.isRefund) {
+      const target = await findRefundTarget(ledgerId, draft.amount, draft.currency, draft.spentAt);
+      if (target !== undefined) {
+        await applyRefund(target.id, draft.amount);
+        refunded++;
+        continue;
+      }
+    }
+
+    if (draft.kind === "income") {
+      const rate = await rateToUsd(draft.currency, draft.spentAt);
+      const income = await createExpense({
+        ledgerId,
+        userId: user.id,
+        categoryId: null,
+        amount: draft.amount,
+        currency: draft.currency,
+        rateToUsd: rate,
+        spentAt: draft.spentAt,
+        merchant: draft.merchant,
+        confidence: null,
+        needsReview: false,
+        kind: "income",
+        incomeSource: draft.incomeSource,
+      });
+
+      created.push(income);
+      continue;
+    }
+
     let slug = body.categorySlug;
     let confidence: number | null = null;
     let needsReview = false;
@@ -358,6 +408,10 @@ app.post("/api/expenses", async (request, reply) => {
   // Карточка в чат — чтобы трата из приложения выглядела так же, как трата
   // из бота, и всё, что произошло, было видно в одном месте.
   for (const expense of created) {
+    // Карточка — только у расходов: доход и возврат в чате своей карточки не
+    // имеют, и рисовать им расходную было бы враньём.
+    if (expense.kind !== "expense") continue;
+
     const card = await buildCard(user, ledgerId, expense);
     await sendCard(BOT_TOKEN, user.tgId, user.id, expense.id, cardText(card)).catch(
       () => undefined,
@@ -365,7 +419,7 @@ app.post("/api/expenses", async (request, reply) => {
   }
 
   const rate = await baseRate(user, todayDay);
-  return { created: created.map((e) => serialize(e, categories, rate)) };
+  return { created: created.map((e) => serialize(e, categories, rate)), refunded };
 });
 
 const patchSchema = z.object({
@@ -482,15 +536,17 @@ app.get("/api/analytics", async (request) => {
   const key = query.period;
   const rate = await baseRate(user, todayDay);
 
-  const [categories, currencies, total] = await Promise.all([
+  const [categories, currencies, total, income] = await Promise.all([
     byCategory(ledgerId, period),
     byCurrency(ledgerId, period),
     totalUsd(ledgerId, period),
+    incomeUsd(ledgerId, period),
   ]);
 
   return {
     period: { key, label: period.label, from: period.from, to: period.to },
     total: total / rate,
+    income: income / rate,
     currency: user.currency,
     categories: categories.map((c) => ({
       slug: c.slug,

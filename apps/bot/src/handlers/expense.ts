@@ -3,11 +3,13 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
 import { env } from "../env.js";
-import { expenseCard } from "../format.js";
+import { expenseCard, incomeCard, refundCard } from "../format.js";
 import { cardKeyboard } from "../keyboards.js";
 import {
   categoryBySlug,
+  applyRefund,
   createExpense,
+  findRefundTarget,
   listCategories,
   softDelete,
   totalSince,
@@ -91,6 +93,63 @@ export async function saveExpenses(
     const amount = entry.amount ?? 0;
     const currency = (entry.currency ?? user.currency) as Currency;
     const spentAt = shiftDay(todayDay, entry.daysAgo);
+    const base = user.currency as Currency;
+
+    // Возврат ищет свою покупку по сумме: названия у них обычно разные, а
+    // сумма — то, что их связывает. Нашлась — гасим её и ничего не создаём.
+    if (entry.isRefund) {
+      const target = await findRefundTarget(ledgerId, amount, currency, spentAt);
+
+      if (target !== undefined) {
+        await applyRefund(target.id, amount);
+        await ctx.reply(
+          refundCard({
+            amount,
+            currency,
+            merchant: target.merchant ?? "",
+            day: target.spentAt,
+            todayDay,
+          }),
+          { parse_mode: "HTML" },
+        );
+        continue;
+      }
+    }
+
+    // Доход не участвует в категориях и в «Потрачено» — только в своей строке.
+    if (entry.kind === "income") {
+      const rate = await rateToUsd(currency, spentAt);
+      const baseRate = await rateToUsd(base, spentAt);
+
+      await createExpense({
+        ledgerId,
+        userId: user.id,
+        categoryId: null,
+        amount,
+        currency,
+        rateToUsd: rate,
+        spentAt,
+        merchant: entry.merchant,
+        confidence: null,
+        needsReview: false,
+        kind: "income",
+        incomeSource: entry.incomeSource,
+      });
+
+      await ctx.reply(
+        incomeCard({
+          source: entry.incomeSource ?? "Доход",
+          amount,
+          currency,
+          baseAmount: (amount * rate) / baseRate,
+          baseCurrency: base,
+          day: spentAt,
+          todayDay,
+        }),
+        { parse_mode: "HTML" },
+      );
+      continue;
+    }
 
     const decision = await categorize(
       {
@@ -124,7 +183,6 @@ export async function saveExpenses(
       needsReview: decision.needsReview,
     });
 
-    const base = user.currency as Currency;
     const baseRate = await rateToUsd(base, spentAt);
     const dayTotalUsd = await totalSince(ledgerId, todayDay);
     const monthTotalUsd = await totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`);

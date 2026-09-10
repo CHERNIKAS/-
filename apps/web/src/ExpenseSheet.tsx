@@ -119,7 +119,7 @@ export function ExpenseSheet({
           </div>
         )}
 
-        <div className="row" style={{ marginBottom: 16 }}>
+        <div className="row" style={{ marginBottom: 13 }}>
           <span
             className="tile"
             style={{
@@ -140,7 +140,7 @@ export function ExpenseSheet({
           </span>
         </div>
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Сумма
         </p>
         <input
@@ -148,14 +148,14 @@ export function ExpenseSheet({
           inputMode="decimal"
           value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
-          style={{ marginBottom: 8 }}
+          style={{ marginBottom: 7 }}
         />
 
         {/* Валюты отдельной строкой: рядом с полем они не помещались и
             растягивали шторку вширь, унося вбок весь экран. Единым
             переключателем, а не россыпью кнопок разной ширины — иначе строка
             выбивается из ровной колонки полей. */}
-        <div className="seg" style={{ marginBottom: 16 }}>
+        <div className="seg" style={{ marginBottom: 13 }}>
           {CURRENCIES.map((code) => (
             <button
               key={code}
@@ -170,12 +170,12 @@ export function ExpenseSheet({
           ))}
         </div>
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Категория
         </p>
         <button
           className="field row"
-          style={{ marginBottom: 16, textAlign: "left" }}
+          style={{ marginBottom: 13, textAlign: "left" }}
           onClick={() => {
             tap();
             setPicking(true);
@@ -187,7 +187,7 @@ export function ExpenseSheet({
           </svg>
         </button>
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Дата
         </p>
         <input
@@ -195,13 +195,13 @@ export function ExpenseSheet({
           type="date"
           value={spentAt}
           onChange={(e) => setSpentAt(e.target.value)}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 13 }}
         />
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Оплата
         </p>
-        <div className="seg" style={{ marginBottom: 16 }}>
+        <div className="seg" style={{ marginBottom: 13 }}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}
@@ -216,7 +216,7 @@ export function ExpenseSheet({
           ))}
         </div>
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Название
         </p>
         <input
@@ -224,10 +224,10 @@ export function ExpenseSheet({
           value={merchant}
           placeholder="где потратил"
           onChange={(e) => setMerchant(e.target.value)}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 13 }}
         />
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 6 }}>
           Заметка
         </p>
         <input
@@ -235,7 +235,7 @@ export function ExpenseSheet({
           value={note}
           placeholder="подарок Ане, закупка на неделю"
           onChange={(e) => setNote(e.target.value)}
-          style={{ marginBottom: 20 }}
+          style={{ marginBottom: 16 }}
         />
 
         <button className="cta mint" disabled={!canSave || busy} onClick={() => void save()}>

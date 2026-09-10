@@ -18,6 +18,14 @@ export const currencyEnum = pgEnum("currency", ["USD", "EUR", "UAH", "TRY"]);
 export const sourceEnum = pgEnum("source", ["bot", "app"]);
 export const paymentEnum = pgEnum("payment", ["card", "cash", "transfer"]);
 export const memberRoleEnum = pgEnum("member_role", ["owner", "member"]);
+/**
+ * Вид операции.
+ *
+ * Переводы между своими счетами не хранятся вовсе: вывел с кошелька на карту —
+ * денег не прибавилось и не убавилось, а в отчёте появился бы фантом.
+ */
+export const kindEnum = pgEnum("expense_kind", ["expense", "income"]);
+
 export const botMessageKindEnum = pgEnum("bot_message_kind", ["card", "panel", "summary"]);
 
 export const users = pgTable(
@@ -139,6 +147,23 @@ export const expenses = pgTable(
     source: sourceEnum().notNull(),
     payment: paymentEnum().notNull().default("card"),
 
+    /** Расход или доход. Доходы не идут в кольцо категорий и в «Потрачено». */
+    kind: kindEnum().notNull().default("expense"),
+    /** Откуда доход: зарплата, фриланс, подарок, продажа. Только для доходов. */
+    incomeSource: varchar("income_source", { length: 32 }),
+
+    /**
+     * Сколько по этой покупке вернули.
+     *
+     * Возврат гасит покупку, а не становится доходом: иначе месяц показывает и
+     * лишнюю трату, и лишний доход, хотя не случилось ни того, ни другого.
+     * Суммой, а не флагом, — возвращают и частями.
+     */
+    refundedAmount: numeric("refunded_amount", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+
     /** Уверенность модели, 0..1. null — категорию поставило правило пользователя. */
     confidence: numeric({ precision: 3, scale: 2 }),
     /** Модель ещё не ответила: категория временная, воркер вернётся к трате. */
@@ -163,6 +188,7 @@ export const expenses = pgTable(
     index("expenses_category_idx").on(t.categoryId),
     index("expenses_needs_review_idx").on(t.needsReview),
     index("expenses_fingerprint_idx").on(t.ledgerId, t.fingerprint),
+    index("expenses_kind_idx").on(t.ledgerId, t.kind, t.spentAt),
   ],
 );
 

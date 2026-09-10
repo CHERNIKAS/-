@@ -150,6 +150,14 @@ const CATEGORY_PATHS: Record<string, ReactElement> = {
       <path d="M4 8.5 12 13l8-4.5M12 13v7" />
     </>
   ),
+  // Доход — не категория, но в списке ему нужен свой знак: стрелка вниз, в
+  // кошелёк, против стрелки расхода.
+  income: (
+    <>
+      <path d="M12 4.5v11M8 12l4 4 4-4" />
+      <path d="M4.5 18.5h15" />
+    </>
+  ),
 };
 
 export function CategoryIcon({ slug, size = 20 }: { slug: string | undefined; size?: number }) {

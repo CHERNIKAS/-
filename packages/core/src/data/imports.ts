@@ -18,6 +18,8 @@ export async function createImportPreview(values: {
   ledgerId: number;
   filename: string;
   rows: ImportedRow[];
+  /** Приходы из того же файла: после подтверждения по ним ищутся возвраты. */
+  credits: ImportedRow[];
   mapping: Mapping;
 }): Promise<ImportRecord> {
   const [row] = await db
@@ -27,7 +29,7 @@ export async function createImportPreview(values: {
       ledgerId: values.ledgerId,
       filename: values.filename.slice(0, 255),
       status: "preview",
-      payload: JSON.stringify(values.rows),
+      payload: JSON.stringify({ rows: values.rows, credits: values.credits }),
       mapping: JSON.stringify(values.mapping),
       rowCount: values.rows.length,
     })
@@ -41,9 +43,26 @@ export async function importById(id: number): Promise<ImportRecord | undefined> 
   return db.query.imports.findFirst({ where: eq(schema.imports.id, id) });
 }
 
+/**
+ * Старые предпросмотры хранили просто массив строк, новые — строки и приходы
+ * вместе. Читаются оба вида: незаконченный импорт не должен ломаться от
+ * выкатки.
+ */
+function payload(record: ImportRecord): { rows: ImportedRow[]; credits: ImportedRow[] } {
+  if (record.payload === null) return { rows: [], credits: [] };
+
+  const parsed = JSON.parse(record.payload) as ImportedRow[] | { rows?: ImportedRow[]; credits?: ImportedRow[] };
+  if (Array.isArray(parsed)) return { rows: parsed, credits: [] };
+
+  return { rows: parsed.rows ?? [], credits: parsed.credits ?? [] };
+}
+
 export function importRows(record: ImportRecord): ImportedRow[] {
-  if (record.payload === null) return [];
-  return JSON.parse(record.payload) as ImportedRow[];
+  return payload(record).rows;
+}
+
+export function importCredits(record: ImportRecord): ImportedRow[] {
+  return payload(record).credits;
 }
 
 /** Строки, которые уже есть в книге: повторный импорт их пропустит. */

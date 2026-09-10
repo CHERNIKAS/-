@@ -26,19 +26,29 @@ export type CurrencyTotal = {
   totalUsd: number;
 };
 
-function periodFilter(ledgerId: number, period: Period) {
+function periodFilter(ledgerId: number, period: Period, kind: "expense" | "income" = "expense") {
   return and(
     eq(schema.expenses.ledgerId, ledgerId),
+    eq(schema.expenses.kind, kind),
     gte(schema.expenses.spentAt, period.from),
     lte(schema.expenses.spentAt, period.to),
     isNull(schema.expenses.deletedAt),
   );
 }
 
+/**
+ * Сумма расхода за вычетом возврата.
+ *
+ * Возврат гасит покупку прямо в её строке, поэтому вычитается везде разом, а
+ * не в каждом отчёте по-своему. Полностью возвращённая покупка даёт ноль и
+ * просто перестаёт влиять на итоги.
+ */
+const NET = sql`(${schema.expenses.amount} - ${schema.expenses.refundedAmount})`;
+
 export async function totalUsd(ledgerId: number, period: Period): Promise<number> {
   const [row] = await db
     .select({
-      total: sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`,
+      total: sql<string>`coalesce(sum(${NET} * ${schema.expenses.rateToUsd}), 0)`,
     })
     .from(schema.expenses)
     .where(periodFilter(ledgerId, period));
@@ -47,7 +57,7 @@ export async function totalUsd(ledgerId: number, period: Period): Promise<number
 }
 
 export async function byCategory(ledgerId: number, period: Period): Promise<CategoryTotal[]> {
-  const totalExpr = sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`;
+  const totalExpr = sql<string>`coalesce(sum(${NET} * ${schema.expenses.rateToUsd}), 0)`;
 
   const rows = await db
     .select({
@@ -78,12 +88,12 @@ export async function byCategory(ledgerId: number, period: Period): Promise<Cate
  * человек на самом деле платил.
  */
 export async function byCurrency(ledgerId: number, period: Period): Promise<CurrencyTotal[]> {
-  const usdExpr = sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`;
+  const usdExpr = sql<string>`coalesce(sum(${NET} * ${schema.expenses.rateToUsd}), 0)`;
 
   const rows = await db
     .select({
       currency: schema.expenses.currency,
-      amount: sql<string>`coalesce(sum(${schema.expenses.amount}), 0)`,
+      amount: sql<string>`coalesce(sum(${NET}), 0)`,
       total: usdExpr,
     })
     .from(schema.expenses)
@@ -96,6 +106,18 @@ export async function byCurrency(ledgerId: number, period: Period): Promise<Curr
     amount: Number(r.amount),
     totalUsd: Number(r.total),
   }));
+}
+
+/** Доходы за период: отдельной строкой, в «Потрачено» они не входят. */
+export async function incomeUsd(ledgerId: number, period: Period): Promise<number> {
+  const [row] = await db
+    .select({
+      total: sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`,
+    })
+    .from(schema.expenses)
+    .where(periodFilter(ledgerId, period, "income"));
+
+  return Number(row?.total ?? 0);
 }
 
 export async function expenseCount(ledgerId: number, period: Period): Promise<number> {

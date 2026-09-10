@@ -36,6 +36,11 @@ export type Expense = {
   source: "bot" | "app";
   needsReview: boolean;
   category: Category | null;
+  /** Расход или доход: доход не участвует в «Потрачено» и в кольце категорий. */
+  kind: "expense" | "income";
+  incomeSource: string | null;
+  /** Сколько по этой покупке вернули: из итогов сумма уже вычтена. */
+  refunded: number;
 };
 
 export type State = {
@@ -51,7 +56,7 @@ export type State = {
   };
   today: string;
   sharedActive: boolean;
-  totals: { day: number; month: number };
+  totals: { day: number; month: number; income: number };
   currencies: { currency: string; amount: number; base: number }[];
   categories: Category[];
   recent: Expense[];
@@ -80,6 +85,7 @@ export type RecurringItem = {
 export type Analytics = {
   period: { key: string; label: string; from: string; to: string };
   total: number;
+  income: number;
   currency: string;
   categories: { slug: string; title: string; emoji: string; total: number }[];
   byCurrency: { currency: string; amount: number; base: number }[];

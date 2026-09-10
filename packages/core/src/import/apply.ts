@@ -25,6 +25,13 @@ export type ParseResult = {
   skipped: number;
   /** Приходы и переводы: в расходы они не идут. */
   incomes: number;
+  /**
+   * Сами приходы — по ним ищутся возвраты.
+   *
+   * Возврат приходит в выписке обычным плюсом, и отличить его от зарплаты
+   * можно только по тому, что он гасит прошлую покупку на ту же сумму.
+   */
+  credits: ImportedRow[];
   /** Отменённые и незавершённые операции — денег не двигали. */
   cancelled: number;
 };
@@ -34,6 +41,7 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
   let skipped = 0;
   let incomes = 0;
   let cancelled = 0;
+  const credits: ImportedRow[] = [];
 
   for (const raw of sheet.slice(Math.max(0, mapping.skipRows))) {
     const dateCell = raw[mapping.dateColumn] ?? "";
@@ -66,12 +74,14 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
 
     if (credit !== null && credit !== 0) {
       incomes++;
+      credits.push(credited(spentAt, Math.abs(credit), description, mapping, raw));
       continue;
     }
 
     const isExpense = mapping.expenseIsNegative ? value < 0 : value > 0;
     if (!isExpense) {
       incomes++;
+      credits.push(credited(spentAt, Math.abs(value), description, mapping, raw));
       continue;
     }
 
@@ -90,7 +100,7 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
     });
   }
 
-  return { rows, skipped, incomes, cancelled };
+  return { rows, skipped, incomes, cancelled, credits };
 }
 
 /**
@@ -109,6 +119,28 @@ function accepted(status: string, okStatuses: string[]): boolean {
   if (okStatuses.length === 0) return true;
 
   return okStatuses.some((ok) => ok.trim().toLowerCase() === clean);
+}
+
+/** Приход в том же виде, что и трата: дальше его сверяют с покупками по сумме. */
+function credited(
+  spentAt: string,
+  amount: number,
+  description: string,
+  mapping: Mapping,
+  raw: string[],
+): ImportedRow {
+  const currency =
+    mapping.currencyColumn === null
+      ? mapping.currency
+      : (matchCurrency(raw[mapping.currencyColumn] ?? "") ?? mapping.currency);
+
+  return {
+    spentAt,
+    amount,
+    currency: currency !== null && CURRENCIES.includes(currency) ? currency : null,
+    description,
+    fingerprint: fingerprint(spentAt, amount, description),
+  };
 }
 
 /**

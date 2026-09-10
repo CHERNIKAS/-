@@ -35,6 +35,8 @@ export function moneyShort(amount: number, currency: Currency): string {
   return `${CURRENCY_SYMBOL[currency]}${formatted}`;
 }
 
+const BREAK = String.fromCharCode(10);
+
 const MONTHS = [
   "янв", "фев", "мар", "апр", "мая", "июн",
   "июл", "авг", "сен", "окт", "ноя", "дек",
@@ -93,6 +95,47 @@ export function expenseCard(d: CardData): string {
   );
 
   return lines.join("\n");
+}
+
+/**
+ * Карточка дохода.
+ *
+ * Без категорий и без итогов дня: доход не тратится и в «Потрачено» не
+ * входит, а показывать рядом с ним расходную сводку — смешивать одно с другим.
+ */
+export function incomeCard(d: {
+  source: string;
+  amount: number;
+  currency: Currency;
+  baseAmount: number;
+  baseCurrency: Currency;
+  day: string;
+  todayDay: string;
+}): string {
+  const meta = [];
+  if (d.currency !== d.baseCurrency) meta.push(`≈ ${money(d.baseAmount, d.baseCurrency)}`);
+  meta.push(humanDay(d.day, d.todayDay));
+
+  return [
+    `<i>${escapeHtml(`Доход · ${d.source}`)}</i>`,
+    `<code>+${money(d.amount, d.currency)}</code>`,
+    `<i>${escapeHtml(meta.join(" · "))}</i>`,
+  ].join(BREAK);
+}
+
+/** Возврат гасит покупку, поэтому карточка говорит, какую именно. */
+export function refundCard(d: {
+  amount: number;
+  currency: Currency;
+  merchant: string;
+  day: string;
+  todayDay: string;
+}): string {
+  return [
+    "<i>Возврат</i>",
+    `<code>+${money(d.amount, d.currency)}</code>`,
+    `<i>${escapeHtml(`погасил покупку${d.merchant === "" ? "" : ` «${d.merchant}»`} · ${humanDay(d.day, d.todayDay)}`)}</i>`,
+  ].join(BREAK);
 }
 
 export function deleteConfirmation(d: {

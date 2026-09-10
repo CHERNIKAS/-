@@ -2,8 +2,11 @@ import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule } 
 import { applyMapping, describesMerchants, detectMapping, readStatement } from "@costnote/core/import";
 import {
   type AppUser,
+  applyRefund,
   createImportPreview,
   db,
+  findRefundTarget,
+  importCredits,
   existingFingerprints,
   importById,
   importRows,
@@ -102,6 +105,7 @@ export async function handleDocument(
       ledgerId,
       filename: name,
       rows: fresh,
+      credits: parsed.credits,
       mapping,
     });
 
@@ -128,7 +132,9 @@ export async function handleDocument(
       fresh.length > 5 ? `<i>…и ещё ${fresh.length - 5}</i>` : "",
       "",
       known.size > 0 ? `<i>${known.size} уже есть в базе — пропущу</i>` : "",
-      parsed.incomes > 0 ? `<i>${parsed.incomes} приходов и переводов — не беру</i>` : "",
+      parsed.incomes > 0
+        ? `<i>${parsed.incomes} приходов — проверю, нет ли среди них возвратов</i>`
+        : "",
       parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
       // Про отсутствие названий честнее предупредить до импорта, а не после.
@@ -234,6 +240,18 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
     created++;
   }
 
+  // Возвраты гасят прошлые покупки: сверка по сумме, потому что названия у
+  // возврата и покупки в выписке обычно разные.
+  let refunded = 0;
+  for (const credit of importCredits(record)) {
+    const currency = (credit.currency ?? base) as Currency;
+    const target = await findRefundTarget(record.ledgerId, credit.amount, currency, credit.spentAt);
+    if (target === undefined) continue;
+
+    await applyRefund(target.id, credit.amount);
+    refunded++;
+  }
+
   await markImportApplied(record.id, created);
 
   const pending = rows.filter(
@@ -249,7 +267,10 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
         : modelFailed
           ? `<i>${pending} трат без категории: модель недоступна, вернусь к ним позже</i>`
           : `<i>${pending} трат ушло в «Прочее» — поправишь, и я запомню</i>`,
-    ].join(NL),
+      refunded > 0 ? `<i>${refunded} возвратов погасили прошлые покупки</i>` : "",
+    ]
+      .filter((line) => line !== "")
+      .join(NL),
     {
       parse_mode: "HTML",
       reply_markup: new InlineKeyboard().text("Отменить импорт", `i:undo:${record.id}`),

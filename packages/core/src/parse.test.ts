@@ -92,6 +92,31 @@ describe("parseEntry", () => {
     expect(r.amount).toBeNull();
   });
 
+it("плюс впереди делает строку доходом", () => {
+    const r = parseEntry("+60000 лир");
+    expect(r.kind).toBe("income");
+    expect(r.amount).toBe(60000);
+    expect(r.currency).toBe("TRY");
+  });
+
+  it("зарплата узнаётся по слову, без плюса", () => {
+    const r = parseEntry("зарплата 2500");
+    expect(r.kind).toBe("income");
+    expect(r.incomeSource).toBe("Зарплата");
+  });
+
+  it("возврат — не доход, а отмена покупки", () => {
+    const r = parseEntry("возврат 15 лир");
+    expect(r.isRefund).toBe(true);
+    expect(r.incomeSource).toBe("Возврат");
+  });
+
+  it("обычная трата остаётся расходом", () => {
+    const r = parseEntry("магаз 15 лир");
+    expect(r.kind).toBe("expense");
+    expect(r.incomeSource).toBeNull();
+  });
+
   it("не путает валюту с началом слова", () => {
     const r = parseEntry("евроремонт 500");
     expect(r.currency).toBeNull();

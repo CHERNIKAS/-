@@ -123,6 +123,17 @@ export function Analytics({ currency, today }: { currency: string; today: string
             }}
           />
 
+          {/* Доход за тот же период — строкой над разбивкой. В кольцо он не
+              идёт: кольцо показывает, куда ушли деньги, а не откуда пришли. */}
+          {data.income > 0 && (
+            <div className="between" style={{ padding: "0 2px 12px" }}>
+              <span className="dim">Доход за период</span>
+              <b className="num" style={{ color: "var(--mint)" }}>
+                +{money(data.income, data.currency)}
+              </b>
+            </div>
+          )}
+
           <p className="label" style={{ margin: "0 2px 10px" }}>
             {mode === "categories" ? "По категориям" : "В каких валютах"}
           </p>

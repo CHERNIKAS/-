@@ -118,6 +118,14 @@ export function Home({
           <span className="dim">В день</span>
           <b>{money(perDay, user.currency)}</b>
         </div>
+        {/* Доход показывается только когда он есть: пустая строка «0» на
+            главной у того, кто ведёт одни расходы, — лишний шум. */}
+        {totals.income > 0 && (
+          <div className="stat">
+            <span className="dim">Доход</span>
+            <b style={{ color: "var(--mint)" }}>+{money(totals.income, user.currency)}</b>
+          </div>
+        )}
       </div>
 
       <p className="label" style={{ margin: "0 2px 10px" }}>
@@ -135,19 +143,39 @@ export function Home({
             return (
               <SwipeRow key={expense.id} onSwipe={(reset) => onSwipe(expense, reset)}>
               <button className="item" onClick={() => onExpense(expense)}>
-                <span className="tile" style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}>
-                  <CategoryIcon slug={expense.category?.slug} />
+                <span
+                  className="tile"
+                  style={
+                    expense.kind === "income"
+                      ? { background: "rgba(93,224,180,.16)", color: "var(--mint)", borderColor: "rgba(93,224,180,.28)" }
+                      : { background: tint(color), color, borderColor: tint(color, 0.24) }
+                  }
+                >
+                  <CategoryIcon slug={expense.kind === "income" ? "income" : expense.category?.slug} />
                 </span>
                 <span className="grow">
                   <span className="title">
-                    {expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant}
+                    {expense.merchant === ""
+                      ? (expense.incomeSource ?? expense.category?.title ?? "Трата")
+                      : expense.merchant}
                   </span>
                   <span className="sub">
                     {dayTitle(expense.spentAt, today)}
-                    {expense.category === null ? "" : ` · ${expense.category.title}`}
+                    {expense.kind === "income"
+                      ? ` · ${expense.incomeSource ?? "доход"}`
+                      : expense.category === null
+                        ? ""
+                        : ` · ${expense.category.title}`}
+                    {/* Возврат виден прямо в строке: иначе сумма в списке и
+                        сумма в итогах расходятся без объяснения. */}
+                    {expense.refunded > 0 ? ` · вернули ${moneyExact(expense.refunded, expense.currency)}` : ""}
                   </span>
                 </span>
-                <span className="amount">
+                <span
+                  className="amount"
+                  style={expense.kind === "income" ? { color: "var(--mint)" } : undefined}
+                >
+                  {expense.kind === "income" ? "+" : ""}
                   {moneyExact(expense.amount, expense.currency)}
                   {expense.currency !== user.currency && (
                     <span className="sub" style={{ display: "block" }}>
