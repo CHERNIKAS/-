@@ -27,7 +27,11 @@ import {
   db,
   activeLedgerId,
   createRecurring,
+  addBalanceEntry,
+  balanceByPlace,
   createLedger,
+  recentBalanceEntries,
+  removeBalanceEntry,
   createSharedLedger,
   MAX_LEDGERS,
   deleteRecurring,
@@ -53,7 +57,7 @@ import {
   userRules,
 } from "@costnote/core/data";
 import cors from "@fastify/cors";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { z } from "zod";
 import { verifyInitData } from "./auth.js";
@@ -208,7 +212,13 @@ app.get("/api/state", async (request) => {
     );
 
   const recent = await db.query.expenses.findMany({
-    where: and(eq(schema.expenses.ledgerId, ledgerId), isNull(schema.expenses.deletedAt)),
+    // Переносы на главной не нужны: их бывают сотни за импорт, и они
+    // вытеснили бы собственно траты, ради которых экран и открывают.
+    where: and(
+      eq(schema.expenses.ledgerId, ledgerId),
+      ne(schema.expenses.kind, "transfer"),
+      isNull(schema.expenses.deletedAt),
+    ),
     orderBy: [desc(schema.expenses.spentAt), desc(schema.expenses.id)],
     limit: 20,
   });
@@ -275,6 +285,8 @@ function serialize(
     needsReview: expense.needsReview,
     kind: expense.kind,
     incomeSource: expense.incomeSource,
+    /** Куда переехали деньги, если это перенос: наличка, карта, крипта. */
+    movedTo: expense.balancePlace,
     // Сколько по этой покупке вернули: строка показывает это отдельно, а из
     // итогов сумма уже вычтена.
     refunded: Number(expense.refundedAmount),
@@ -534,6 +546,10 @@ const patchSchema = z.object({
   note: z.string().max(500).nullable().optional(),
   payment: z.enum(["card", "cash", "transfer"]).optional(),
   incomeSource: z.string().max(32).optional(),
+  /** Вид операции можно переменить когда угодно, а не только сразу после импорта. */
+  kind: z.enum(["expense", "income", "transfer"]).optional(),
+  /** Куда переехали деньги: наличка, карта, крипта. Пусто — никуда. */
+  movedTo: z.string().max(64).nullable().optional(),
 });
 
 app.get("/api/expenses/:id", async (request, reply) => {
@@ -583,6 +599,42 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   if (body.note !== undefined) patch["note"] = body.note;
   if (body.payment !== undefined) patch["payment"] = body.payment;
   if (body.incomeSource !== undefined) patch["incomeSource"] = body.incomeSource;
+
+  if (body.kind !== undefined) {
+    patch["kind"] = body.kind;
+    // Раз человек сказал сам, спрашивать больше нечего.
+    patch["needsKindReview"] = false;
+  }
+
+  // Переезд денег в наличку или на карту — это движение по балансу. Оно
+  // переписывается вместе с операцией, а не плодится при каждом сохранении.
+  if (body.movedTo !== undefined) {
+    if (expense.balanceEntryId !== null) {
+      await removeBalanceEntry(ledgerId, expense.balanceEntryId);
+      patch["balanceEntryId"] = null;
+      patch["balancePlace"] = null;
+    }
+
+    const place = body.movedTo === null ? "" : body.movedTo.trim();
+    if (place !== "") {
+      const amount = body.amount ?? Number(expense.amount);
+      // Ушло со счёта — значит в этом месте прибавилось, и наоборот.
+      const sign = expense.incomeSource === "Приход" ? -1 : 1;
+
+      const entry = await addBalanceEntry({
+        ledgerId,
+        userId: user.id,
+        place,
+        amount: amount * sign,
+        currency: (body.currency ?? expense.currency) as Currency,
+        note: expense.merchant,
+        happenedAt: body.spentAt ?? expense.spentAt,
+      });
+
+      patch["balanceEntryId"] = entry.id;
+      patch["balancePlace"] = place;
+    }
+  }
   if (body.spentAt !== undefined) patch["spentAt"] = body.spentAt;
 
   if (body.currency !== undefined || body.spentAt !== undefined) {
@@ -831,6 +883,82 @@ app.post("/api/books/active", async (request, reply) => {
     activeLedgerId: target.id === personal?.id ? null : target.id,
   });
 
+  return { ok: true };
+});
+
+/**
+ * Баланс: сколько денег есть сейчас.
+ *
+ * Правится движениями, а не перезаписью числа: «на карту пришло 500», «из
+ * налички ушло 200». Остаток — их сумма, и по истории видно, из чего он
+ * сложился.
+ */
+app.get("/api/balance", async (request) => {
+  const { user, ledgerId } = request;
+  const rate = await baseRate(user, today());
+
+  const [places, entries] = await Promise.all([
+    balanceByPlace(ledgerId),
+    recentBalanceEntries(ledgerId),
+  ]);
+
+  // Общий итог — в валюте отображения, по сегодняшнему курсу: это ответ на
+  // вопрос «сколько у меня всего», а он всегда о сегодняшнем дне.
+  let totalUsd = 0;
+  for (const place of places) {
+    totalUsd += place.amount * (await rateToUsd(place.currency as Currency, today()));
+  }
+
+  return {
+    total: totalUsd / rate,
+    currency: user.currency,
+    places: places.map((p) => ({
+      place: p.place,
+      currency: p.currency,
+      amount: p.amount,
+      moves: p.moves,
+      lastAt: p.lastAt,
+    })),
+    entries: entries.map((e) => ({
+      id: e.id,
+      place: e.place,
+      amount: Number(e.amount),
+      currency: e.currency,
+      note: e.note,
+      happenedAt: e.happenedAt,
+    })),
+  };
+});
+
+const balanceSchema = z.object({
+  place: z.string().min(1).max(64),
+  /** Со знаком: минус означает, что денег стало меньше. */
+  amount: z.number().refine((v) => v !== 0, "движение на ноль ничего не меняет"),
+  currency: z.enum(CURRENCIES),
+  note: z.string().max(128).optional(),
+  happenedAt: z.string().optional(),
+});
+
+app.post("/api/balance", async (request) => {
+  const { user, ledgerId } = request;
+  const body = balanceSchema.parse(request.body);
+
+  const entry = await addBalanceEntry({
+    ledgerId,
+    userId: user.id,
+    place: body.place.trim(),
+    amount: body.amount,
+    currency: body.currency,
+    note: body.note ?? null,
+    happenedAt: body.happenedAt ?? today(),
+  });
+
+  return { id: entry.id };
+});
+
+app.delete("/api/balance/:id", async (request) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+  await removeBalanceEntry(request.ledgerId, id);
   return { ok: true };
 });
 

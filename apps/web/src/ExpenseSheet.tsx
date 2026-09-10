@@ -45,7 +45,14 @@ export function ExpenseSheet({
   const [note, setNote] = useState(expense.note ?? "");
   const [slug, setSlug] = useState(expense.category?.slug ?? null);
   const [source, setSource] = useState(expense.incomeSource ?? "Прочее");
-  const isIncome = expense.kind === "income";
+  /**
+   * Вид операции меняется когда угодно, а не только сразу после импорта:
+   * понимание, чем был перевод, приходит и через месяц.
+   */
+  const [kind, setKind] = useState(expense.kind);
+  const [movedTo, setMovedTo] = useState(expense.movedTo ?? "");
+  const isIncome = kind === "income";
+  const isTransfer = kind === "transfer";
   const [picking, setPicking] = useState(false);
   const [noteOpen, setNoteOpen] = useState(expense.note !== null && expense.note !== "");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -70,8 +77,10 @@ export function ExpenseSheet({
         payment,
         merchant,
         note: note.trim() === "" ? null : note.trim(),
+        kind,
         ...(isIncome ? { incomeSource: source } : {}),
-        ...(slug === null || isIncome ? {} : { categorySlug: slug }),
+        ...(isTransfer ? { movedTo: movedTo === "" ? null : movedTo } : {}),
+        ...(slug === null || kind !== "expense" ? {} : { categorySlug: slug }),
       });
       notify("success");
       onSaved();
@@ -208,12 +217,56 @@ export function ExpenseSheet({
           ))}
         </div>
 
+        {/* Вид операции: перенос между своими счетами не трата и не доход, и
+            в отчёты не идёт. Передумать можно в любой момент. */}
+        <p className="label" style={{ marginBottom: 8 }}>
+          Что это
+        </p>
+        <div className="seg" style={{ marginBottom: 15 }}>
+          {(["expense", "income", "transfer"] as const).map((value) => (
+            <button
+              key={value}
+              className={kind === value ? "on" : ""}
+              onClick={() => {
+                tap();
+                setKind(value);
+              }}
+            >
+              {value === "expense" ? "Расход" : value === "income" ? "Доход" : "Перенос"}
+            </button>
+          ))}
+        </div>
+
+        {/* Обнал не тратит деньги, а перекладывает их в наличку: отметил — и
+            баланс наличных сам вырос на эту сумму. */}
+        {isTransfer && (
+          <>
+            <p className="label" style={{ marginBottom: 8 }}>
+              Куда переехали
+            </p>
+            <div className="chips" style={{ marginBottom: 15 }}>
+              {["", "Наличка", "Карта", "Крипта"].map((title) => (
+                <button
+                  key={title === "" ? "none" : title}
+                  className={movedTo === title ? "pill on" : "pill ghost"}
+                  onClick={() => {
+                    tap();
+                    setMovedTo(title);
+                  }}
+                >
+                  {title === "" ? "никуда" : title}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* У дохода вместо категории источник: категории отвечают на вопрос
             «куда ушли деньги», а к пришедшим он не относится. */}
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 8 }} hidden={isTransfer}>
           {isIncome ? "Источник" : "Категория"}
         </p>
-        {isIncome ? (
+        {isTransfer ? null : isIncome ? (
           <div className="chips" style={{ marginBottom: 15 }}>
             {/* Источник, которого нет в списке, тоже показываем: он пришёл из
                 чата или остался от старой настройки, и молча терять его нельзя. */}
@@ -257,10 +310,10 @@ export function ExpenseSheet({
           style={{ marginBottom: 15 }}
         />
 
-        <p className="label" style={{ marginBottom: 8 }} hidden={isIncome}>
+        <p className="label" style={{ marginBottom: 8 }} hidden={isIncome || isTransfer}>
           Оплата
         </p>
-        <div className="seg" style={{ marginBottom: 15 }} hidden={isIncome}>
+        <div className="seg" style={{ marginBottom: 15 }} hidden={isIncome || isTransfer}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}

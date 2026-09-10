@@ -204,6 +204,17 @@ export const expenses = pgTable(
      * может прийти и заработок, и собственные деньги.
      */
     needsKindReview: boolean("needs_kind_review").notNull().default(false),
+
+    /**
+     * Движение по балансу, которое породила эта операция.
+     *
+     * Обнал не тратит деньги, а перекладывает их в наличку: с крипты ушло, в
+     * кармане появилось. Ссылка нужна, чтобы правка операции не плодила
+     * движения, а переписывала своё.
+     */
+    balanceEntryId: integer("balance_entry_id"),
+    /** Место, куда переехали деньги: показывается в карточке операции. */
+    balancePlace: varchar("balance_place", { length: 64 }),
     /**
      * Отпечаток строки возврата.
      *
@@ -403,3 +414,38 @@ export const imports = pgTable("imports", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
 });
+
+/**
+ * Движения по балансу.
+ *
+ * Баланс не хранится числом, которое переписывают: хранятся движения, а
+ * остаток — их сумма. Так видно, из чего он сложился, и любую ошибку можно
+ * поправить встречным движением, ничего не затирая.
+ *
+ * Это отдельный слой от трат: траты отвечают на вопрос «куда ушло», баланс —
+ * «сколько есть». Второе не выводится из первого, пока учёт неполон: наличные
+ * тратятся молча, и никакая выписка этого не увидит.
+ */
+export const balanceEntries = pgTable(
+  "balance_entries",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    ledgerId: integer("ledger_id")
+      .notNull()
+      .references(() => ledgers.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Где лежат деньги: карта, крипта, наличка. Свободное слово, не список. */
+    place: varchar({ length: 64 }).notNull(),
+    /** Со знаком: плюс — прибавилось, минус — убавилось. */
+    amount: numeric({ precision: 14, scale: 2 }).notNull(),
+    currency: currencyEnum().notNull(),
+    note: varchar({ length: 128 }),
+
+    happenedAt: date("happened_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("balance_ledger_idx").on(t.ledgerId, t.place)],
+);

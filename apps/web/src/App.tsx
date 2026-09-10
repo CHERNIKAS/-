@@ -6,6 +6,7 @@ import { Confirm } from "./Confirm.js";
 import { ExpenseSheet } from "./ExpenseSheet.js";
 import { Add } from "./screens/Add.js";
 import { Analytics } from "./screens/Analytics.js";
+import { Balance } from "./screens/Balance.js";
 import { Categories } from "./screens/Categories.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
@@ -36,7 +37,7 @@ export function App() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pickingCurrency, setPickingCurrency] = useState(false);
   const [pickingBook, setPickingBook] = useState(false);
-  const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared" | "review">(
+  const [more, setMore] = useState<"settings" | "categories" | "recurring" | "shared" | "review" | "balance">(
     "settings",
   );
   /**
@@ -180,6 +181,7 @@ export function App() {
                 ["categories", "Категории"],
                 ["recurring", "Регулярные"],
                 ["shared", "Общий"],
+                ["balance", "Баланс"],
                 ["review", "Разбор"],
               ] as const
             ).map(([key, title]) => (
@@ -197,6 +199,9 @@ export function App() {
           </div>
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
+          {more === "balance" && (
+            <Balance currency={state.user.currency} today={state.today} />
+          )}
           {more === "review" && (
             <Review currency={state.user.currency} onDone={() => void reload()} />
           )}

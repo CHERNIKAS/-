@@ -36,13 +36,15 @@ export type Expense = {
   source: "bot" | "app";
   needsReview: boolean;
   category: Category | null;
-  /** Расход или доход: доход не участвует в «Потрачено» и в кольце категорий. */
-  kind: "expense" | "income";
+  /** Расход, доход или перенос между своими счетами. */
+  kind: "expense" | "income" | "transfer";
   incomeSource: string | null;
   /** Сколько по этой покупке вернули: из итогов сумма уже вычтена. */
   refunded: number;
   /** Вес траты в итогах: сумма за вычетом возврата, в валюте отображения. */
   netBase: number;
+  /** Куда переехали деньги, если это перенос: наличка, карта, крипта. */
+  movedTo: string | null;
 };
 
 export type State = {
@@ -88,6 +90,20 @@ export type RecurringItem = {
   active: boolean;
   category: string | null;
   categorySlug: string | null;
+};
+
+export type BalanceState = {
+  total: number;
+  currency: string;
+  places: { place: string; currency: string; amount: number; moves: number; lastAt: string }[];
+  entries: {
+    id: number;
+    place: string;
+    amount: number;
+    currency: string;
+    note: string | null;
+    happenedAt: string;
+  }[];
 };
 
 export type ReviewItem = {
@@ -228,6 +244,18 @@ export const api = {
   deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
 
   /** Эмодзи не передаём: сервер подбирает его по названию той же таблицей, что и значок. */
+  balance: () => request<BalanceState>("/balance"),
+
+  addBalance: (payload: {
+    place: string;
+    amount: number;
+    currency: string;
+    note?: string;
+    happenedAt?: string;
+  }) => request<{ id: number }>("/balance", { method: "POST", body: JSON.stringify(payload) }),
+
+  removeBalance: (id: number) => request<{ ok: true }>(`/balance/${id}`, { method: "DELETE" }),
+
   books: () =>
     request<{ limit: number; books: { id: number; title: string; kind: string; active: boolean }[] }>(
       "/books",

@@ -268,9 +268,11 @@ export function History({
                       : expense.merchant}
                   </span>
                   <span className="sub">
-                    {expense.kind === "income"
-                      ? (expense.incomeSource ?? "доход")
-                      : (expense.category?.title ?? "без категории")}
+                    {expense.kind === "transfer"
+                      ? `перенос${expense.movedTo === null ? "" : ` · ${expense.movedTo}`}`
+                      : expense.kind === "income"
+                        ? (expense.incomeSource ?? "доход")
+                        : (expense.category?.title ?? "без категории")}
                     {expense.refunded > 0
                       ? ` · вернули ${moneyExact(expense.refunded, expense.currency)}`
                       : ""}
