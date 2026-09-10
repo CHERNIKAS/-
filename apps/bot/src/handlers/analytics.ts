@@ -4,7 +4,7 @@ import { InlineKeyboard, InputFile } from "grammy";
 import type { Context } from "grammy";
 import { escapeHtml, moneyShort } from "../format.js";
 import { PERIOD_KEYS, PERIOD_TITLE, type PeriodKey, buildPeriod } from "@costnote/core";
-import { byCategory, byCurrency, expenseCount, totalUsd } from "@costnote/core/data";
+import { byCategory, byCurrency, expenseCount, incomeUsd, totalUsd } from "@costnote/core/data";
 import { rateToUsd, today } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
@@ -35,11 +35,12 @@ async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<
   const base = user.currency as Currency;
   const baseRate = await rateToUsd(base, todayDay);
 
-  const [categories, currencies, total, count] = await Promise.all([
+  const [categories, currencies, total, count, income] = await Promise.all([
     byCategory(ledgerId, period),
     byCurrency(ledgerId, period),
     totalUsd(ledgerId, period),
     expenseCount(ledgerId, period),
+    incomeUsd(ledgerId, period),
   ]);
 
   const inBase = (usd: number) => usd / baseRate;
@@ -50,10 +51,12 @@ async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<
     color: PALETTE[i % PALETTE.length] as string,
   }));
 
+  // Без легенды: тот же список стоит прямо под картинкой, и подпись внутри
+  // кольца дублировала бы его — в приложении кольцо тоже голое.
   const svg = donutSvg(segments, {
     total: moneyShort(inBase(total), base),
     caption: period.label,
-    legendRows: Math.min(segments.length, 6),
+    legendRows: 0,
   });
 
   // Рендерим с запасом по плотности: Telegram показывает картинку во всю
@@ -73,12 +76,27 @@ async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<
     return { png, caption: lines.join("\n") };
   }
 
-  lines.push(`<code>${moneyShort(inBase(total), base)}</code>`, "——————");
+  lines.push(`<code>${moneyShort(inBase(total), base)}</code>`);
 
+  // Доход отдельной строкой, как на главной: в «Потрачено» он не входит.
+  if (income > 0) {
+    lines.push(`<i>доход</i> <code>+${moneyShort(inBase(income), base)}</code>`);
+  }
+
+  lines.push("——————");
+
+  // Доля рядом с суммой — то же, что видно в приложении: без неё непонятно,
+  // много это или мало относительно остального.
   for (const c of categories.slice(0, 8)) {
+    const share = total === 0 ? 0 : Math.round((c.totalUsd / total) * 100);
     lines.push(
-      `${c.emoji} ${escapeHtml(c.title)}  <code>${moneyShort(inBase(c.totalUsd), base)}</code>`,
+      `${c.emoji} ${escapeHtml(c.title)}  <code>${moneyShort(inBase(c.totalUsd), base)}</code>` +
+        `  <i>${share}%</i>`,
     );
+  }
+
+  if (categories.length > 8) {
+    lines.push(`<i>…и ещё ${categories.length - 8}</i>`);
   }
 
   // Разрез «как вносил» имеет смысл только при нескольких валютах: при одной

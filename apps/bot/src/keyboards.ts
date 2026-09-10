@@ -10,8 +10,6 @@ import type { Category } from "@costnote/core/data";
  */
 export const mainKeyboard = new Keyboard()
   .text("Аналитика")
-  .text("Категории")
-  .row()
   .text("Помощь")
   .resized();
 

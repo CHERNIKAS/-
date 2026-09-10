@@ -181,17 +181,6 @@ bot.command("settings", async (ctx) => {
 
 bot.hears("Помощь", (ctx) => ctx.reply("Напиши /help — там примеры."));
 
-bot.hears("Категории", async (ctx) => {
-  if (!ctx.from) return;
-  const { ledgerId } = await ensureUser(ctx.from);
-  const categories = await listCategories(ledgerId);
-
-  await ctx.reply(
-    ["<i>Твои категории</i>", ...categories.map((c) => `${c.emoji} ${c.title}`)].join("\n"),
-    { parse_mode: "HTML" },
-  );
-});
-
 bot.hears("Аналитика", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
