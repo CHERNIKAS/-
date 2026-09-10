@@ -1,4 +1,5 @@
 import type { Currency } from "../currencies.js";
+import { fetchWithRetry } from "./retry.js";
 import { ClassifyError } from "./classify.js";
 
 /**
@@ -65,7 +66,7 @@ export async function digest(input: DigestInput, options: DigestOptions): Promis
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
 
   try {
-    const response = await doFetch(`${ENDPOINT}/${options.model}:generateContent`, {
+    const response = await fetchWithRetry(doFetch, `${ENDPOINT}/${options.model}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": options.apiKey },
       signal: controller.signal,

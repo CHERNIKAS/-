@@ -1,4 +1,5 @@
 import { CURRENCIES, type Currency } from "../currencies.js";
+import { fetchWithRetry } from "../ai/retry.js";
 import { ClassifyError } from "../ai/classify.js";
 import type { Sheet } from "./read.js";
 
@@ -92,10 +93,10 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
 
   const doFetch = options.fetchImpl ?? fetch;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
 
   try {
-    const response = await doFetch(`${ENDPOINT}/${options.model}:generateContent`, {
+    const response = await fetchWithRetry(doFetch, `${ENDPOINT}/${options.model}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": options.apiKey },
       signal: controller.signal,

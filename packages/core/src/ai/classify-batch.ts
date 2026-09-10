@@ -1,4 +1,5 @@
 import type { CategoryOption } from "./classify.js";
+import { fetchWithRetry } from "./retry.js";
 import { ClassifyError } from "./classify.js";
 
 /**
@@ -87,7 +88,7 @@ async function askChunk(
   ].join("\n");
 
   try {
-    const response = await doFetch(`${ENDPOINT}/${options.model}:generateContent`, {
+    const response = await fetchWithRetry(doFetch, `${ENDPOINT}/${options.model}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": options.apiKey },
       signal: controller.signal,

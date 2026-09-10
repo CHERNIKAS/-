@@ -162,9 +162,15 @@ export async function handleDocument(
     });
   } catch (error) {
     console.error("импорт не удался:", error);
-    await ctx.api
-      .editMessageText(status.chat.id, status.message_id, "Не получилось прочитать файл.")
-      .catch(() => undefined);
+
+    // Разные беды — разные слова. «Не получилось прочитать файл» на отказ
+    // модели отправляет человека искать несуществующую ошибку в выписке.
+    const text =
+      error instanceof ClassifyError
+        ? "Модель сейчас недоступна — она отвечает отказом на все запросы. Пришли файл через несколько минут, он никуда не денется."
+        : "Не получилось прочитать файл.";
+
+    await ctx.api.editMessageText(status.chat.id, status.message_id, text).catch(() => undefined);
   }
 }
 

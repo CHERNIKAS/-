@@ -1,4 +1,5 @@
 import type { Currency } from "../currencies.js";
+import { fetchWithRetry } from "./retry.js";
 
 /**
  * Категоризация моделью — второй слой, для строк, которых нет в правилах.
@@ -99,7 +100,7 @@ export async function classify(
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000);
 
   try {
-    const response = await doFetch(`${ENDPOINT}/${options.model}:generateContent`, {
+    const response = await fetchWithRetry(doFetch, `${ENDPOINT}/${options.model}:generateContent`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
