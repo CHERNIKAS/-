@@ -2,7 +2,7 @@ import { type Currency, categorize, classify, digest } from "@costnote/core";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Api, Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
-import { db, schema } from "@costnote/core/data";
+import { activeLedgerId, db, schema } from "@costnote/core/data";
 import { env } from "./env.js";
 import { moneyShort } from "./format.js";
 import { totalSince } from "@costnote/core/data";
@@ -73,11 +73,21 @@ function shiftDay(day: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-async function personalLedgerId(userId: number): Promise<number | null> {
-  const ledger = await db.query.ledgers.findFirst({
-    where: and(eq(schema.ledgers.ownerId, userId), eq(schema.ledgers.isShared, false)),
-  });
-  return ledger?.id ?? null;
+/**
+ * Книга, в которую человек сейчас пишет.
+ *
+ * Раньше здесь бралась личная — и всё, что делает расписание, смотрело не туда:
+ * человек весь день писал в общий бюджет, а вечером получал «трат не было».
+ * Напоминания, сводки и разбор месяца обязаны говорить о той же книге, что
+ * открыта в чате и в приложении.
+ */
+async function currentLedgerId(user: AppUser): Promise<number | null> {
+  try {
+    return await activeLedgerId(user);
+  } catch {
+    // У человека может не быть даже личной книги: он ещё ни разу не писал.
+    return null;
+  }
 }
 
 /**
@@ -95,7 +105,7 @@ async function runReminders(api: Api, users: AppUser[], now: Date): Promise<void
     if (user.lastReminderDay === day) continue;
     if (localHour(user.timezone, now) !== user.reminderHour) continue;
 
-    const ledgerId = await personalLedgerId(user.id);
+    const ledgerId = await currentLedgerId(user);
     if (ledgerId === null) continue;
 
     const spentToday = await totalSince(ledgerId, day);
@@ -152,7 +162,7 @@ async function runCleanup(api: Api, users: AppUser[], now: Date): Promise<void> 
         .where(eq(schema.botMessages.id, card.id));
     }
 
-    const ledgerId = await personalLedgerId(user.id);
+    const ledgerId = await currentLedgerId(user);
     if (ledgerId === null) continue;
 
     const base = user.currency as Currency;
@@ -183,7 +193,7 @@ async function runSuggestions(api: Api, users: AppUser[], now: Date): Promise<vo
     const day = localDay(user.timezone, now);
     if (user.lastSuggestionDay !== null && shiftDay(day, 6) < user.lastSuggestionDay) continue;
 
-    const ledgerId = await personalLedgerId(user.id);
+    const ledgerId = await currentLedgerId(user);
     if (ledgerId === null) continue;
 
     const suggestions = await pendingSuggestions(ledgerId, shiftDay(day, 30));
@@ -281,7 +291,7 @@ async function runWeekly(api: Api, users: AppUser[], now: Date): Promise<void> {
     if (new Date(`${day}T00:00:00Z`).getUTCDay() !== 1) continue;
     if (user.lastWeeklyDay === day) continue;
 
-    const ledgerId = await personalLedgerId(user.id);
+    const ledgerId = await currentLedgerId(user);
     if (ledgerId === null) continue;
 
     const base = user.currency as Currency;
@@ -421,7 +431,7 @@ async function runDigest(api: Api, users: AppUser[], now: Date): Promise<void> {
     const month = `${day.slice(0, 7)}-01`;
     if (user.lastDigestMonth === month) continue;
 
-    const ledgerId = await personalLedgerId(user.id);
+    const ledgerId = await currentLedgerId(user);
     if (ledgerId === null) continue;
 
     await db.update(schema.users).set({ lastDigestMonth: month }).where(eq(schema.users.id, user.id));
