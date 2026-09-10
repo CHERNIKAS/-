@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Category, type Expense } from "./api.js";
 import { CategorySheet } from "./CategorySheet.js";
+import { Confirm } from "./Confirm.js";
 import { moneyExact } from "./format.js";
 import { CategoryIcon } from "./icons.js";
 import { categoryColor, tint } from "./palette.js";
@@ -90,6 +91,17 @@ export function ExpenseSheet({
     }
   }
 
+  if (confirmDelete) {
+    return (
+      <Confirm
+        title="Удалить трату?"
+        detail={`${moneyExact(expense.amount, expense.currency)}${expense.merchant === "" ? "" : ` · ${expense.merchant}`}`}
+        onConfirm={remove}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    );
+  }
+
   if (picking) {
     return (
       <CategorySheet
@@ -119,7 +131,7 @@ export function ExpenseSheet({
           </div>
         )}
 
-        <div className="row" style={{ marginBottom: 13 }}>
+        <div className="row" style={{ marginBottom: 15 }}>
           <span
             className="tile"
             style={{
@@ -138,9 +150,25 @@ export function ExpenseSheet({
             </span>
             <span className="sub">{provenance(expense)}</span>
           </span>
+
+          {/* Удаление — в углу карточки, а не полосой под «Сохранить»: там
+              оно занимало высоту наравне с сохранением и путалось с ним. */}
+          <button
+            className="danger-square"
+            aria-label="Удалить трату"
+            onClick={() => {
+              tap();
+              setConfirmDelete(true);
+            }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 7h16M9.5 7V5h5v2M6.5 7l1 12.5h9L17.5 7" />
+              <path d="M10.5 10.5v6M13.5 10.5v6" />
+            </svg>
+          </button>
         </div>
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Сумма
         </p>
         <input
@@ -148,14 +176,14 @@ export function ExpenseSheet({
           inputMode="decimal"
           value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
-          style={{ marginBottom: 7 }}
+          style={{ marginBottom: 8 }}
         />
 
         {/* Валюты отдельной строкой: рядом с полем они не помещались и
             растягивали шторку вширь, унося вбок весь экран. Единым
             переключателем, а не россыпью кнопок разной ширины — иначе строка
             выбивается из ровной колонки полей. */}
-        <div className="seg" style={{ marginBottom: 13 }}>
+        <div className="seg" style={{ marginBottom: 15 }}>
           {CURRENCIES.map((code) => (
             <button
               key={code}
@@ -170,12 +198,12 @@ export function ExpenseSheet({
           ))}
         </div>
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Категория
         </p>
         <button
           className="field row"
-          style={{ marginBottom: 13, textAlign: "left" }}
+          style={{ marginBottom: 15, textAlign: "left" }}
           onClick={() => {
             tap();
             setPicking(true);
@@ -187,7 +215,7 @@ export function ExpenseSheet({
           </svg>
         </button>
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Дата
         </p>
         <input
@@ -195,13 +223,13 @@ export function ExpenseSheet({
           type="date"
           value={spentAt}
           onChange={(e) => setSpentAt(e.target.value)}
-          style={{ marginBottom: 13 }}
+          style={{ marginBottom: 15 }}
         />
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Оплата
         </p>
-        <div className="seg" style={{ marginBottom: 13 }}>
+        <div className="seg" style={{ marginBottom: 15 }}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}
@@ -216,7 +244,7 @@ export function ExpenseSheet({
           ))}
         </div>
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Название
         </p>
         <input
@@ -224,10 +252,10 @@ export function ExpenseSheet({
           value={merchant}
           placeholder="где потратил"
           onChange={(e) => setMerchant(e.target.value)}
-          style={{ marginBottom: 13 }}
+          style={{ marginBottom: 15 }}
         />
 
-        <p className="label" style={{ marginBottom: 6 }}>
+        <p className="label" style={{ marginBottom: 8 }}>
           Заметка
         </p>
         <input
@@ -242,38 +270,6 @@ export function ExpenseSheet({
           {busy ? "Сохраняю…" : `Сохранить ${moneyExact(canSave ? parsedAmount : 0, currency)}`}
         </button>
 
-        {confirmDelete ? (
-          <div className="row" style={{ marginTop: 10 }}>
-            <button
-              className="cta"
-              style={{ background: "rgba(255,120,120,.2)", color: "#ffb4b4" }}
-              onClick={() => void remove()}
-            >
-              Да, удалить
-            </button>
-            <button
-              className="cta"
-              style={{ background: "rgba(255,255,255,.1)", color: "var(--ink)" }}
-              onClick={() => setConfirmDelete(false)}
-            >
-              Оставить
-            </button>
-          </div>
-        ) : (
-          // Удаление — сдержанной ссылкой, а не второй большой кнопкой:
-          // рядом с «Сохранить» она весила столько же и добавляла карточке
-          // высоты ровно там, где её не хватало.
-          <button
-            className="linky"
-            style={{ display: "block", width: "100%", marginTop: 10, textAlign: "center" }}
-            onClick={() => {
-              tap();
-              setConfirmDelete(true);
-            }}
-          >
-            Удалить трату
-          </button>
-        )}
       </div>
     </div>
   );
