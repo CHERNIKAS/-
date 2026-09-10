@@ -43,6 +43,7 @@ export function ExpenseSheet({
   const [note, setNote] = useState(expense.note ?? "");
   const [slug, setSlug] = useState(expense.category?.slug ?? null);
   const [picking, setPicking] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(expense.note !== null && expense.note !== "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -255,16 +256,34 @@ export function ExpenseSheet({
           style={{ marginBottom: 15 }}
         />
 
-        <p className="label" style={{ marginBottom: 8 }}>
-          Заметка
-        </p>
-        <input
-          className="field"
-          value={note}
-          placeholder="подарок Ане, закупка на неделю"
-          onChange={(e) => setNote(e.target.value)}
-          style={{ marginBottom: 16 }}
-        />
+        {/* Заметка нужна редко, а поле под неё занимало высоту всегда. Пока
+            её нет — это одна строка-приглашение. */}
+        {noteOpen ? (
+          <>
+            <p className="label" style={{ marginBottom: 8 }}>
+              Заметка
+            </p>
+            <input
+              className="field"
+              value={note}
+              autoFocus={note === ""}
+              placeholder="подарок Ане, закупка на неделю"
+              onChange={(e) => setNote(e.target.value)}
+              style={{ marginBottom: 16 }}
+            />
+          </>
+        ) : (
+          <button
+            className="linky"
+            style={{ display: "block", marginBottom: 14 }}
+            onClick={() => {
+              tap();
+              setNoteOpen(true);
+            }}
+          >
+            + заметка
+          </button>
+        )}
 
         <button className="cta mint" disabled={!canSave || busy} onClick={() => void save()}>
           {busy ? "Сохраняю…" : `Сохранить ${moneyExact(canSave ? parsedAmount : 0, currency)}`}

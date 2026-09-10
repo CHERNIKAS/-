@@ -366,7 +366,10 @@ svg {
   min-height: 62dvh;
   max-height: 92dvh;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* none, а не contain: при почти совпадающих высотах iOS всё равно даёт
+     резиновый отскок, и шторка «уезжает» на пол-экрана из-за пары лишних
+     пикселей — выглядит как настоящая прокрутка, хотя листать нечего. */
+  overscroll-behavior: none;
   padding: 12px 18px calc(22px + env(safe-area-inset-bottom));
   border-radius: 26px 26px 0 0;
   background: #2e1e5e;
