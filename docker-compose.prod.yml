@@ -42,6 +42,10 @@ services:
       DEFAULT_CURRENCY: ${DEFAULT_CURRENCY}
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE}
       DEFAULT_REMINDER_HOUR: ${DEFAULT_REMINDER_HOUR}
+      STATEMENTS_DIR: /data/statements
+    volumes:
+      # Присланные выписки переживают пересборку: том, а не слой образа.
+      - statements:/data/statements
     networks: [internal]
 
   api:
@@ -91,6 +95,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  statements:
 
 networks:
   internal:

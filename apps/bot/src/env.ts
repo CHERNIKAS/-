@@ -14,6 +14,9 @@ const schema = z.object({
   DEFAULT_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(21),
 
   WEBAPP_URL: z.string().default(""),
+
+  /** Куда складывать присланные выписки. В контейнере это подключённый том. */
+  STATEMENTS_DIR: z.string().default("/data/statements"),
 });
 
 const parsed = schema.safeParse(process.env);

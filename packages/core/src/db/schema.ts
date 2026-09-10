@@ -359,6 +359,16 @@ export const imports = pgTable("imports", {
   mapping: text(),
   rowCount: integer("row_count").notNull().default(0),
 
+  /**
+   * Где лежит сам файл выписки.
+   *
+   * Разобранные строки живут только до подтверждения, а исходник остаётся: без
+   * него нельзя ни проверить спорную сумму, ни понять, почему формат разобрался
+   * не так. Путь, а не содержимое: базе незачем распухать от PDF-ов.
+   */
+  storedPath: varchar("stored_path", { length: 512 }),
+  fileSize: integer("file_size"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
 });

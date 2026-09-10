@@ -23,6 +23,7 @@ import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
 import { env } from "../env.js";
 import { moneyShort } from "../format.js";
+import { storeStatement } from "../statements.js";
 
 const NL = String.fromCharCode(10);
 
@@ -56,6 +57,10 @@ export async function handleDocument(
     const file = await ctx.getFile();
     const url = `https://api.telegram.org/file/bot${env.BOT_TOKEN}/${file.file_path ?? ""}`;
     const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+
+    // Сохраняем до разбора: нечитаемые выписки нужны позже больше всего —
+    // именно по ним видно, какой формат бот не понял.
+    const stored = await storeStatement(user.id, name, bytes);
 
     const { rows, format } = await readStatement(bytes, name);
 
@@ -108,6 +113,7 @@ export async function handleDocument(
       rows: fresh,
       credits: parsed.credits,
       mapping,
+      ...(stored === null ? {} : { storedPath: stored.path, fileSize: stored.size }),
     });
 
     const base = user.currency as Currency;

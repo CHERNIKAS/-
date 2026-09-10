@@ -21,6 +21,9 @@ export async function createImportPreview(values: {
   /** Приходы из того же файла: после подтверждения по ним ищутся возвраты. */
   credits: ImportedRow[];
   mapping: Mapping;
+  /** Где лежит сам файл — разобранные строки живут только до подтверждения. */
+  storedPath?: string;
+  fileSize?: number;
 }): Promise<ImportRecord> {
   const [row] = await db
     .insert(schema.imports)
@@ -32,6 +35,8 @@ export async function createImportPreview(values: {
       payload: JSON.stringify({ rows: values.rows, credits: values.credits }),
       mapping: JSON.stringify(values.mapping),
       rowCount: values.rows.length,
+      storedPath: values.storedPath ?? null,
+      fileSize: values.fileSize ?? null,
     })
     .returning();
 
