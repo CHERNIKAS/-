@@ -11,7 +11,16 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
   const [budget, setBudget] = useState(
     state.user.monthlyBudget === null ? "" : String(state.user.monthlyBudget),
   );
+  const [budgetOn, setBudgetOn] = useState(state.user.monthlyBudget !== null);
   const user = state.user;
+
+  function saveBudget() {
+    const value = Number(budget.replace(",", "."));
+    const next = budget.trim() === "" || !Number.isFinite(value) || value <= 0 ? null : value;
+    if (next === user.monthlyBudget) return;
+
+    void patch({ monthlyBudget: next });
+  }
 
   async function patch(body: Record<string, unknown>) {
     if (busy) return;
@@ -107,27 +116,54 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         </div>
       </div>
 
+      {/* Бюджет — не обязанность, а отдельная функция: большинство просто
+          смотрит, сколько осталось от поступлений, и лимит им не нужен. */}
       <p className="label" style={{ margin: "24px 2px 10px" }}>
         Месячный бюджет
       </p>
-      <div className="row">
-        <input
-          className="field"
-          inputMode="decimal"
-          placeholder="не задан"
-          value={budget}
-          onChange={(e) => setBudget(e.target.value.replace(/[^\d.,]/g, ""))}
-        />
-        <button
-          className="pill"
-          style={{ minHeight: 50, padding: "0 20px" }}
-          onClick={() => {
-            const value = Number(budget.replace(",", "."));
-            void patch({ monthlyBudget: budget.trim() === "" ? null : value });
-          }}
-        >
-          Сохранить
-        </button>
+      <div className="card" style={{ padding: "4px 16px" }}>
+        <div className="item">
+          <span className="grow">
+            <span className="title">Лимит на месяц</span>
+            <span className="sub">
+              {budgetOn ? "покажу, сколько осталось от лимита" : "остаток считается от поступлений"}
+            </span>
+          </span>
+          <button
+            className={budgetOn ? "pill on" : "pill ghost"}
+            onClick={() => {
+              tap();
+              if (budgetOn) {
+                setBudgetOn(false);
+                setBudget("");
+                void patch({ monthlyBudget: null });
+                return;
+              }
+              setBudgetOn(true);
+            }}
+          >
+            {budgetOn ? "вкл" : "выкл"}
+          </button>
+        </div>
+
+        {budgetOn && (
+          <div className="item">
+            <input
+              className="field grow"
+              inputMode="decimal"
+              autoFocus={user.monthlyBudget === null}
+              placeholder="сколько в месяц"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value.replace(/[^\d.,]/g, ""))}
+              // Сохранение по уходу с поля и по Enter: отдельная кнопка рядом
+              // с суммой всё равно нажимается вслепую и только занимает место.
+              onBlur={saveBudget}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveBudget();
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <p className="label" style={{ margin: "24px 2px 10px" }}>

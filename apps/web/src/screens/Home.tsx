@@ -25,7 +25,16 @@ export function Home({
 }) {
   const { user, totals, recent, today } = state;
   const budget = user.monthlyBudget;
-  const left = budget === null ? null : budget - totals.month;
+
+  /**
+   * Остаток.
+   *
+   * С лимитом это «сколько ещё можно потратить», без лимита — «сколько
+   * осталось от того, что пришло». Второе честнее для тех, кто лимитов не
+   * ставит: деньги ведь всё равно кончаются, просто не по плану.
+   */
+  const left = budget === null ? totals.income - totals.month : budget - totals.month;
+  const hasLeft = budget !== null || totals.income > 0;
   const progress = budget === null || budget === 0 ? 0 : Math.min(1, totals.month / budget);
   const dayOfMonth = Number(today.slice(8, 10));
 
@@ -91,7 +100,7 @@ export function Home({
         </div>
       )}
 
-      {budget !== null && left !== null && (
+      {budget !== null && (
         <>
           <div className="bar" style={{ margin: "18px 0 10px" }}>
             <i
@@ -124,6 +133,15 @@ export function Home({
           <div className="stat">
             <span className="dim">Доход</span>
             <b style={{ color: "var(--mint)" }}>+{money(totals.income, user.currency)}</b>
+          </div>
+        )}
+
+        {hasLeft && (
+          <div className="stat">
+            <span className="dim">{budget === null ? "Остаток" : "Осталось"}</span>
+            <b style={{ color: left < 0 ? "var(--rose)" : undefined }}>
+              {money(left, user.currency)}
+            </b>
           </div>
         )}
       </div>

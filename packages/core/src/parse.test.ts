@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEntry, parseMessage, splitEntries } from "./parse.js";
+import { parseEntry, parseMessage, resolveSpentAt, splitEntries } from "./parse.js";
 
 describe("splitEntries", () => {
   it("режет по переносу строки и выкидывает пустые", () => {
@@ -140,5 +140,39 @@ describe("parseMessage", () => {
     expect(r).toHaveLength(2);
     expect(r[1]?.ok).toBe(false);
     expect(r[1]?.raw).toBe("ааа");
+  });
+});
+
+describe("даты в строке", () => {
+  const TODAY = "2026-09-10";
+
+  it("месяц словом", () => {
+    const r = parseEntry("продукты 800 грн 5 сентября");
+    expect(resolveSpentAt(r, TODAY)).toBe("2026-09-05");
+    expect(r.merchant).toBe("продукты");
+    expect(r.amount).toBe(800);
+  });
+
+  it("через слэш", () => {
+    expect(resolveSpentAt(parseEntry("такси 12 5/09"), TODAY)).toBe("2026-09-05");
+  });
+
+  it("с годом через точку", () => {
+    expect(resolveSpentAt(parseEntry("аренда 500 01.08.2026"), TODAY)).toBe("2026-08-01");
+  });
+
+  it("копейки через точку остаются суммой", () => {
+    const r = parseEntry("кофе 4.50");
+    expect(r.amount).toBe(4.5);
+    expect(r.dateHint).toBeNull();
+    expect(resolveSpentAt(r, TODAY)).toBe(TODAY);
+  });
+
+  it("дата из будущего означает прошлый год", () => {
+    expect(resolveSpentAt(parseEntry("подарок 30 25 декабря"), TODAY)).toBe("2025-12-25");
+  });
+
+  it("вчера по-прежнему работает", () => {
+    expect(resolveSpentAt(parseEntry("такси 12 вчера"), TODAY)).toBe("2026-09-09");
   });
 });

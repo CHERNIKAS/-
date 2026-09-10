@@ -41,6 +41,14 @@ export function Categories({
   const [fresh, setFresh] = useState("");
   const [added, setAdded] = useState<string[]>([]);
   const [freshSource, setFreshSource] = useState("");
+  /**
+   * Тот же переключатель, что и при добавлении траты.
+   *
+   * Расход и доход устроены по-разному — категории против источников, — но
+   * настраиваются одинаково, и держать их одним длинным полотном значит
+   * заставлять пролистывать чужую половину.
+   */
+  const [side, setSide] = useState<"expense" | "income">("expense");
 
   async function load() {
     const [cats, rls] = await Promise.all([api.categories(), api.rules()]);
@@ -126,131 +134,153 @@ export function Categories({
 
   return (
     <>
-      <div className="between" style={{ padding: "12px 2px 14px" }}>
-        <p className="label">Категории</p>
-        <span className="dim">
-          {rows.length} из {limit}
-        </span>
-      </div>
-
-      <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-        <input
-          className="field grow"
-          placeholder="Например, Спорт"
-          value={fresh}
-          maxLength={64}
-          onChange={(e) => setFresh(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void create();
-          }}
-        />
-        <button
-          className="pill on"
-          style={{ padding: "14px 18px" }}
-          disabled={fresh.trim() === "" || busy || rows.length >= limit}
-          onClick={() => void create()}
-        >
-          Завести
-        </button>
-      </div>
-
-      {added.length > 0 && (
-        <p className="dim" style={{ margin: "0 2px 14px" }}>
-          Завёл: {added.join(", ")}. Значок подобрал по названию — можно
-          переименовать, если не угадал.
-        </p>
-      )}
-
-      <div className="card rows" style={{ padding: "2px 16px" }}>
-        {rows.map((row) => {
-          const color = categoryColor(row.slug, rows);
-          return (
-            <button
-              key={row.slug}
-              className="item"
-              onClick={() => {
-                tap();
-                setEditing(row);
-                setTitle(row.title);
-                setMerging(false);
-              }}
-            >
-              <span
-                className="tile"
-                style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
-              >
-                <CategoryIcon slug={row.slug} title={row.title} />
-              </span>
-              <span className="grow">
-                <span className="title">{row.title}</span>
-                <span className="sub">
-                  {row.count === 0 ? "за 30 дней трат нет" : `${row.count} трат за 30 дней`}
-                </span>
-              </span>
-              <span className="amount">{row.total === 0 ? "—" : money(row.total, currency)}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="label" style={{ margin: "22px 2px 10px" }}>
-        Источники дохода
-      </p>
-
-      <div className="chips" style={{ marginBottom: 12 }}>
-        {incomeSources.map((title) => (
+      <div className="seg" style={{ margin: "12px 0 14px" }}>
+        {(["expense", "income"] as const).map((value) => (
           <button
-            key={title}
-            className="pill"
+            key={value}
+            className={side === value ? "on" : ""}
             onClick={() => {
               tap();
-              void saveSources(incomeSources.filter((t) => t !== title));
+              setSide(value);
             }}
           >
-            {title}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6 6 18" />
-            </svg>
+            {value === "expense" ? "Расход" : "Доход"}
           </button>
         ))}
       </div>
 
-      <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-        <input
-          className="field grow"
-          placeholder="Например, Аренда"
-          value={freshSource}
-          maxLength={32}
-          onChange={(e) => setFreshSource(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            const title = freshSource.trim();
-            if (title === "") return;
-            setFreshSource("");
-            void saveSources([...incomeSources, title]);
-          }}
-        />
-        <button
-          className="pill on"
-          style={{ padding: "14px 18px" }}
-          disabled={freshSource.trim() === "" || busy}
-          onClick={() => {
-            const title = freshSource.trim();
-            if (title === "") return;
-            setFreshSource("");
-            void saveSources([...incomeSources, title]);
-          }}
-        >
-          Добавить
-        </button>
+      <div className="between" style={{ padding: "0 2px 12px" }}>
+        <p className="label">{side === "expense" ? "Категории" : "Источники дохода"}</p>
+        <span className="dim">
+          {side === "expense" ? `${rows.length} из ${limit}` : `${incomeSources.length} из 12`}
+        </span>
       </div>
 
-      <p className="dim" style={{ margin: "8px 2px 0" }}>
-        Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
-      </p>
+      {side === "expense" && (
+        <>
+        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+          <input
+            className="field grow"
+            placeholder="Например, Спорт"
+            value={fresh}
+            maxLength={64}
+            onChange={(e) => setFresh(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void create();
+            }}
+          />
+          <button
+            className="pill on"
+            style={{ padding: "14px 18px" }}
+            disabled={fresh.trim() === "" || busy || rows.length >= limit}
+            onClick={() => void create()}
+          >
+            Завести
+          </button>
+        </div>
 
+        {added.length > 0 && (
+          <p className="dim" style={{ margin: "0 2px 14px" }}>
+            Завёл: {added.join(", ")}. Значок подобрал по названию — можно
+            переименовать, если не угадал.
+          </p>
+        )}
+
+        <div className="card rows" style={{ padding: "2px 16px" }}>
+          {rows.map((row) => {
+            const color = categoryColor(row.slug, rows);
+            return (
+              <button
+                key={row.slug}
+                className="item"
+                onClick={() => {
+                  tap();
+                  setEditing(row);
+                  setTitle(row.title);
+                  setMerging(false);
+                }}
+              >
+                <span
+                  className="tile"
+                  style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
+                >
+                  <CategoryIcon slug={row.slug} title={row.title} />
+                </span>
+                <span className="grow">
+                  <span className="title">{row.title}</span>
+                  <span className="sub">
+                    {row.count === 0 ? "за 30 дней трат нет" : `${row.count} трат за 30 дней`}
+                  </span>
+                </span>
+                <span className="amount">{row.total === 0 ? "—" : money(row.total, currency)}</span>
+              </button>
+            );
+          })}
+        </div>
+        </>
+      )}
+
+      {side === "income" && (
+        <>
+        <div className="chips" style={{ marginBottom: 12 }}>
+          {incomeSources.map((title) => (
+            <button
+              key={title}
+              className="pill"
+              onClick={() => {
+                tap();
+                void saveSources(incomeSources.filter((t) => t !== title));
+              }}
+            >
+              {title}
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          ))}
+        </div>
+
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <input
+            className="field grow"
+            placeholder="Например, Аренда"
+            value={freshSource}
+            maxLength={32}
+            onChange={(e) => setFreshSource(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const title = freshSource.trim();
+              if (title === "") return;
+              setFreshSource("");
+              void saveSources([...incomeSources, title]);
+            }}
+          />
+          <button
+            className="pill on"
+            style={{ padding: "14px 18px" }}
+            disabled={freshSource.trim() === "" || busy}
+            onClick={() => {
+              const title = freshSource.trim();
+              if (title === "") return;
+              setFreshSource("");
+              void saveSources([...incomeSources, title]);
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+
+        <p className="dim" style={{ margin: "8px 2px 0" }}>
+          Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
+        </p>
+        </>
+      )}
+
+      {/* Правила учат категориям расходов, у доходов их нет — на второй
+          половине эта кнопка была бы обманом. */}
       <button
         className="cta"
+        hidden={side === "income"}
         style={{ marginTop: 22, background: "rgba(255,255,255,.12)", color: "var(--ink)" }}
         onClick={() => {
           tap();
@@ -260,7 +290,7 @@ export function Categories({
         {showRules ? "Скрыть правила" : `Выученные правила · ${rules.length}`}
       </button>
 
-      {showRules && (
+      {showRules && side === "expense" && (
         <>
           <p className="dim" style={{ margin: "12px 2px" }}>
             Каждая твоя правка превращается в правило, и такая строка больше не

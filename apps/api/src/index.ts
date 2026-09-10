@@ -5,6 +5,7 @@ import {
   categorize,
   classify,
   parseMessage,
+  resolveSpentAt,
   DEFAULT_INCOME_SOURCES,
   FALLBACK_CATEGORY_SLUG,
   guessIcon,
@@ -331,7 +332,7 @@ app.post("/api/expenses", async (request, reply) => {
             amount: e.amount ?? 0,
             // Валюта из строки главнее выбранной в приложении: её написали явно.
             currency: (e.currency ?? body.currency ?? user.currency) as Currency,
-            spentAt: shiftDay(todayDay, e.daysAgo),
+            spentAt: resolveSpentAt(e, todayDay),
             // Переключатель в приложении главнее молчания строки: человек
             // выбрал «доход» руками. Но слово «возврат» в строке сильнее и
             // его — оно говорит не «откуда деньги», а «что это вообще».

@@ -204,11 +204,28 @@ export function Add({
                 if (e.key === "Enter") void save();
               }}
             />
-            <p className="dim" style={{ margin: "10px 2px 16px" }}>
-              {kind === "income"
-                ? "Сумму, валюту и день пойму из строки."
-                : "Сумму, валюту и день пойму из строки. Категорию подберу сам."}
-              {currency !== defaultCurrency && ` Без валюты в строке запишу в ${currency}.`}
+            {/* Примеры вместо описания: короткая строка «магаз 15 лир» учит
+                формату быстрее любого объяснения. Нажатие подставляет её —
+                можно попробовать, а не разгадывать. */}
+            <div className="chips" style={{ margin: "10px 0 10px" }}>
+              {(kind === "income" ? INCOME_EXAMPLES : EXPENSE_EXAMPLES).map((example) => (
+                <button
+                  key={example}
+                  className="pill ghost"
+                  onClick={() => {
+                    tap();
+                    setText(example);
+                  }}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+
+            <p className="dim" style={{ margin: "0 2px 16px" }}>
+              Пиши как удобно: сумму, валюту и день пойму сам.
+              {kind === "expense" && " Категорию подберу тоже."}
+              {currency !== defaultCurrency && ` Без валюты запишу в ${currency}.`}
             </p>
           </>
         ) : (
@@ -276,6 +293,22 @@ export function Add({
 }
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
+
+/**
+ * Примеры, а не правила.
+ *
+ * Каждый показывает что-то одно: сленг вместо названия, вчерашний день,
+ * копейки через точку, две траты подряд. Больше четырёх — это уже справочник,
+ * который никто не читает.
+ */
+const EXPENSE_EXAMPLES = [
+  "магаз 15 лир",
+  "такси 12 вчера",
+  "кофе 4.50, аптека 30",
+  "продукты 800 грн 5 сентября",
+];
+
+const INCOME_EXAMPLES = ["+500", "зарплата 2500 вчера", "поступление 60000 лир"];
 
 function nextDigits(current: string, key: string): string {
   if (key === "⌫") return current.slice(0, -1);

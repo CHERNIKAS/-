@@ -1,4 +1,4 @@
-import { categorize, classify, type Currency, parseMessage } from "@costnote/core";
+import { categorize, classify, type Currency, parseMessage, resolveSpentAt } from "@costnote/core";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
@@ -92,7 +92,7 @@ export async function saveExpenses(
   for (const entry of parsed) {
     const amount = entry.amount ?? 0;
     const currency = (entry.currency ?? user.currency) as Currency;
-    const spentAt = shiftDay(todayDay, entry.daysAgo);
+    const spentAt = resolveSpentAt(entry, todayDay);
     const base = user.currency as Currency;
 
     // Возврат ищет свою покупку по сумме: названия у них обычно разные, а
