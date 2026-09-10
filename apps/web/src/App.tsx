@@ -15,6 +15,7 @@ import { IconChart, IconGear, IconHome, IconList, IconPlus } from "./icons.js";
 import { backButton, notify, tap } from "./telegram.js";
 import type { Range } from "./periods.js";
 import { useBodyLock } from "./useBodyLock.js";
+import { useViewport } from "./useViewport.js";
 import { useSheetDrag } from "./useSheetDrag.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
@@ -57,6 +58,9 @@ export function App() {
       setTab("stats");
     });
   }, [focus, tab]);
+
+  // Клавиатура меняет видимую высоту, и шторки должны мериться по ней.
+  useViewport();
 
   const closeCurrency = useCallback(() => setPickingCurrency(false), []);
   const currencyDrag = useSheetDrag(closeCurrency);
