@@ -105,14 +105,21 @@ export const api = {
     return request<{ expenses: Expense[] }>(`/expenses?${params.toString()}`);
   },
 
-  createFromText: (text: string, currency?: string) =>
-    request<{ created: Expense[] }>("/expenses", {
+  createFromText: (text: string, currency?: string, kind?: "expense" | "income", incomeSource?: string) =>
+    request<{ created: Expense[]; refunded: number }>("/expenses", {
       method: "POST",
-      body: JSON.stringify({ text, currency }),
+      body: JSON.stringify({ text, currency, kind, incomeSource }),
     }),
 
-  create: (payload: { amount: number; currency?: string; categorySlug?: string; merchant?: string }) =>
-    request<{ created: Expense[] }>("/expenses", {
+  create: (payload: {
+    amount: number;
+    currency?: string;
+    categorySlug?: string;
+    merchant?: string;
+    kind?: "expense" | "income";
+    incomeSource?: string;
+  }) =>
+    request<{ created: Expense[]; refunded: number }>("/expenses", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -196,9 +203,10 @@ export const api = {
 
   deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
 
-  createCategory: (title: string, emoji: string) =>
+  /** Эмодзи не передаём: сервер подбирает его по названию той же таблицей, что и значок. */
+  createCategory: (title: string) =>
     request<{ category: Category | null }>("/categories", {
       method: "POST",
-      body: JSON.stringify({ title, emoji }),
+      body: JSON.stringify({ title }),
     }),
 };

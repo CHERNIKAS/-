@@ -1,3 +1,4 @@
+import { guessIcon } from "@costnote/core";
 /**
  * Иконки.
  *
@@ -150,6 +151,93 @@ const CATEGORY_PATHS: Record<string, ReactElement> = {
       <path d="M4 8.5 12 13l8-4.5M12 13v7" />
     </>
   ),
+  sport: (
+    <>
+      <path d="M6.5 8v8M17.5 8v8M4 10v4M20 10v4M6.5 12h11" />
+    </>
+  ),
+  kids: (
+    <>
+      <circle cx="12" cy="8" r="3" />
+      <path d="M7 20c0-3 2.2-5 5-5s5 2 5 5" />
+      <path d="M8.5 5.5 7 3.5M15.5 5.5 17 3.5" />
+    </>
+  ),
+  pets: (
+    <>
+      <circle cx="8" cy="9" r="1.6" />
+      <circle cx="12" cy="7.5" r="1.6" />
+      <circle cx="16" cy="9" r="1.6" />
+      <path d="M12 12c-2.5 0-4.5 2-4.5 4.2 0 1.6 1.3 2.6 2.9 2.2l1.6-.4 1.6.4c1.6.4 2.9-.6 2.9-2.2C16.5 14 14.5 12 12 12Z" />
+    </>
+  ),
+  gift: (
+    <>
+      <rect x="4" y="9.5" width="16" height="10" rx="2" />
+      <path d="M4 13h16M12 9.5V19.5" />
+      <path d="M12 9.5C10 9.5 8 8.7 8 7a2 2 0 0 1 4 0c0-1.4 1-2 2-2a2 2 0 0 1 0 4c-1 0-2 .5-2 .5Z" />
+    </>
+  ),
+  study: (
+    <>
+      <path d="M3.5 9.5 12 5.5l8.5 4-8.5 4-8.5-4Z" />
+      <path d="M7 11.8V16c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-4.2" />
+    </>
+  ),
+  beauty: (
+    <>
+      <path d="M9 4.5h6l-1 7a2 2 0 0 1-4 0l-1-7Z" />
+      <path d="M12 13.5v6M9.5 19.5h5" />
+    </>
+  ),
+  repair: (
+    <>
+      <path d="M14.5 4.5a4.5 4.5 0 0 0-5.9 5.9l-4.1 4.1a2 2 0 1 0 2.8 2.8l4.1-4.1a4.5 4.5 0 0 0 5.9-5.9l-2.6 2.6-2.2-2.2 2-3.2Z" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="M4 16v-4l1.8-4h10.4L18 12v4" />
+      <path d="M4 13.5h14" />
+      <circle cx="7.5" cy="16.5" r="1.4" />
+      <circle cx="16.5" cy="16.5" r="1.4" />
+    </>
+  ),
+  travel: (
+    <>
+      <path d="M3 13.5 20 6l-3.5 8.5L12 15l-1.5 4-1.5-4.5L3 13.5Z" />
+    </>
+  ),
+  tax: (
+    <>
+      <path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4v-17Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M5 4.5h9a3 3 0 0 1 3 3v12H8a3 3 0 0 0-3 3v-18Z" />
+      <path d="M5 19.5a3 3 0 0 1 3-3h9" />
+    </>
+  ),
+  tech: (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="11" rx="2" />
+      <path d="M2 19.5h20" />
+    </>
+  ),
+  smoke: (
+    <>
+      <rect x="3.5" y="13" width="13" height="4" rx="1" />
+      <path d="M18.5 13v4M21 13v4M13 13V9a2.5 2.5 0 0 1 2.5-2.5" />
+    </>
+  ),
+  bar: (
+    <>
+      <path d="M7 4.5h10l-5 6-5-6Z" />
+      <path d="M12 10.5v8M9 18.5h6" />
+    </>
+  ),
   // Доход — не категория, но в списке ему нужен свой знак: стрелка вниз, в
   // кошелёк, против стрелки расхода.
   income: (
@@ -160,8 +248,30 @@ const CATEGORY_PATHS: Record<string, ReactElement> = {
   ),
 };
 
-export function CategoryIcon({ slug, size = 20 }: { slug: string | undefined; size?: number }) {
-  const paths = (slug === undefined ? undefined : CATEGORY_PATHS[slug]) ?? (
+/**
+ * Значок категории.
+ *
+ * У встроенных категорий он привязан к слагу, у заведённых человеком слаг
+ * случайный — там значок подбирается по названию той же таблицей, что и эмодзи
+ * в чате. Иначе все новые категории выглядели бы одинаково.
+ */
+export function CategoryIcon({
+  slug,
+  title,
+  size = 20,
+}: {
+  slug: string | undefined;
+  title?: string;
+  size?: number;
+}) {
+  const key =
+    slug !== undefined && CATEGORY_PATHS[slug] !== undefined
+      ? slug
+      : title === undefined
+        ? slug
+        : guessIcon(title).icon;
+
+  const paths = (key === undefined ? undefined : CATEGORY_PATHS[key]) ?? (
     <>
       <path d="M4.5 12.5 12 5l7.5 7.5-7.5 7.5-7.5-7.5Z" />
     </>

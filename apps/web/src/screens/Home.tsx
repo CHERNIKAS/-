@@ -151,7 +151,10 @@ export function Home({
                       : { background: tint(color), color, borderColor: tint(color, 0.24) }
                   }
                 >
-                  <CategoryIcon slug={expense.kind === "income" ? "income" : expense.category?.slug} />
+                  <CategoryIcon
+                    slug={expense.kind === "income" ? "income" : expense.category?.slug}
+                    {...(expense.category === null ? {} : { title: expense.category.title })}
+                  />
                 </span>
                 <span className="grow">
                   <span className="title">

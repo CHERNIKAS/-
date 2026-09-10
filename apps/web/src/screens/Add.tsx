@@ -33,12 +33,22 @@ export function Add({
   const [error, setError] = useState<string | null>(null);
   const [allCategories, setAllCategories] = useState(false);
   const [currency, setCurrency] = useState(defaultCurrency);
+  /**
+   * Расход или доход.
+   *
+   * Переключатель, а не отдельный экран: деньги приходят реже, чем уходят, но
+   * когда приходят — это то же самое действие, только в другую сторону.
+   */
+  const [kind, setKind] = useState<"expense" | "income">("expense");
+  const [source, setSource] = useState<string>(INCOME_SOURCES[0]);
+  const [done, setDone] = useState<string | null>(null);
   useBodyLock(true);
   const drag = useSheetDrag(onClose);
   const [pickingCurrency, setPickingCurrency] = useState(false);
 
   const amount = Number(digits.replace(",", ".")) || 0;
   const canSave = mode === "text" ? text.trim() !== "" : amount > 0;
+  const placeholder = kind === "income" ? "зарплата 2500" : "магаз 15 лир";
 
   async function save() {
     if (!canSave || busy) return;
@@ -46,17 +56,28 @@ export function Add({
     setError(null);
 
     try {
-      if (mode === "text") {
-        // Валюта из строки главнее выбранной пилюлей: человек написал её явно.
-        await api.createFromText(text.trim(), currency);
-      } else {
-        await api.create({
-          amount,
-          currency,
-          ...(slug === null ? {} : { categorySlug: slug }),
-        });
-      }
+      const result =
+        mode === "text"
+          ? // Валюта из строки главнее выбранной пилюлей: человек написал её явно.
+            await api.createFromText(text.trim(), currency, kind, source)
+          : await api.create({
+              amount,
+              currency,
+              kind,
+              ...(kind === "income" ? { incomeSource: source } : {}),
+              ...(slug === null || kind === "income" ? {} : { categorySlug: slug }),
+            });
+
       notify("success");
+
+      // Возврат ничего не создаёт — он гасит прошлую покупку. Промолчать здесь
+      // значит оставить человека гадать, случилось ли что-нибудь вообще.
+      if (result.created.length === 0 && result.refunded > 0) {
+        setDone(result.refunded === 1 ? "Возврат погасил покупку" : `Погашено покупок: ${result.refunded}`);
+        setTimeout(onDone, 1400);
+        return;
+      }
+
       onDone();
     } catch (e) {
       notify("error");
@@ -92,7 +113,7 @@ export function Add({
         <div className="grabber" />
 
         <div className="between" style={{ marginBottom: 14 }}>
-          <span className="label">Новая трата</span>
+          <span className="label">{kind === "income" ? "Новый доход" : "Новая трата"}</span>
           <button
             className="pill"
             onClick={() => {
@@ -125,6 +146,44 @@ export function Add({
           </div>
         )}
 
+        <div className="seg" style={{ marginBottom: 14 }}>
+          {(["expense", "income"] as const).map((value) => (
+            <button
+              key={value}
+              className={kind === value ? "on" : ""}
+              onClick={() => {
+                tap();
+                setKind(value);
+              }}
+            >
+              {value === "expense" ? "Расход" : "Доход"}
+            </button>
+          ))}
+        </div>
+
+        {kind === "income" && (
+          <div className="chips" style={{ marginBottom: 14 }}>
+            {INCOME_SOURCES.map((title) => (
+              <button
+                key={title}
+                className={title === source ? "pill on" : "pill ghost"}
+                onClick={() => {
+                  tap();
+                  setSource(title);
+                }}
+              >
+                {title}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {done !== null && (
+          <div className="card" style={{ padding: 14, marginBottom: 12, textAlign: "center" }}>
+            {done}
+          </div>
+        )}
+
         {error !== null && (
           <div className="err" style={{ marginBottom: 12 }}>
             {error}
@@ -136,7 +195,7 @@ export function Add({
             <input
               className="field"
               autoFocus
-              placeholder="магаз 15 лир"
+              placeholder={placeholder}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -144,7 +203,9 @@ export function Add({
               }}
             />
             <p className="dim" style={{ margin: "10px 2px 16px" }}>
-              Сумму, валюту и день пойму из строки. Категорию подберу сам.
+              {kind === "income"
+                ? "Сумму, валюту и день пойму из строки."
+                : "Сумму, валюту и день пойму из строки. Категорию подберу сам."}
               {currency !== defaultCurrency && ` Без валюты в строке запишу в ${currency}.`}
             </p>
           </>
@@ -154,7 +215,11 @@ export function Add({
               {digits === "" ? "0" : digits}
             </p>
 
-            <div className="chips" style={{ marginBottom: 14, justifyContent: "center" }}>
+            <div
+              className="chips"
+              style={{ marginBottom: 14, justifyContent: "center" }}
+              hidden={kind === "income"}
+            >
               {visible.map((c) => (
                 <button
                   key={c.slug}
@@ -209,6 +274,9 @@ export function Add({
 }
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
+
+/** Короткий список: длинный превращает быстрый ввод в выбор из меню. */
+const INCOME_SOURCES = ["Зарплата", "Фриланс", "Подарок", "Продажа", "Прочее"] as const;
 
 function nextDigits(current: string, key: string): string {
   if (key === "⌫") return current.slice(0, -1);

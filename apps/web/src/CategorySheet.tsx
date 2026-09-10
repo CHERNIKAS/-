@@ -47,7 +47,7 @@ export function CategorySheet({
     setBusy(true);
     try {
       const title = query.trim();
-      const result = await api.createCategory(title.charAt(0).toUpperCase() + title.slice(1), "🏷");
+      const result = await api.createCategory(title.charAt(0).toUpperCase() + title.slice(1));
       if (result.category) onPick(result.category.slug);
     } catch {
       notify("error");
@@ -135,7 +135,7 @@ export function CategorySheet({
                   className="tile"
                   style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
                 >
-                  <CategoryIcon slug={c.slug} />
+                  <CategoryIcon slug={c.slug} title={c.title} />
                 </span>
                 <span className="grow title">{c.title}</span>
                 {c.slug === current && <span className="pill on">выбрано</span>}

@@ -1,5 +1,6 @@
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db.js";
+import { guessIcon } from "../icons.js";
 import { FALLBACK_CATEGORY_SLUG } from "../index.js";
 
 /**
@@ -74,7 +75,13 @@ export async function createCategoryFromSuggestion(
 
   const [created] = await db
     .insert(schema.categories)
-    .values({ ledgerId, slug, title: title.slice(0, 64), emoji: "🏷", sort: 100 })
+    .values({
+      ledgerId,
+      slug,
+      title: title.slice(0, 64),
+      emoji: guessIcon(title).emoji,
+      sort: 100,
+    })
     .returning();
 
   if (!created) return null;

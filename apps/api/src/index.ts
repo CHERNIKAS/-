@@ -6,6 +6,7 @@ import {
   classify,
   parseMessage,
   FALLBACK_CATEGORY_SLUG,
+  guessIcon,
   MAX_CATEGORIES,
   buildPeriod,
   PERIOD_KEYS,
@@ -51,7 +52,16 @@ import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { z } from "zod";
 import { verifyInitData } from "./auth.js";
-import { type CardData, cardText, removeCards, sendCard, updateCard } from "./telegram.js";
+import {
+  type CardData,
+  cardText,
+  incomeText,
+  refundText,
+  removeCards,
+  sendCard,
+  sendPlain,
+  updateCard,
+} from "./telegram.js";
 
 
 const BOT_TOKEN = process.env["BOT_TOKEN"] ?? "";
@@ -276,6 +286,9 @@ const createSchema = z.object({
   categorySlug: z.string().optional(),
   spentAt: z.string().optional(),
   merchant: z.string().max(128).optional(),
+  /** Приложение может сказать прямо, что это доход, — без слов в строке. */
+  kind: z.enum(["expense", "income"]).optional(),
+  incomeSource: z.string().max(32).optional(),
 });
 
 /**
@@ -302,8 +315,11 @@ app.post("/api/expenses", async (request, reply) => {
             // Валюта из строки главнее выбранной в приложении: её написали явно.
             currency: (e.currency ?? body.currency ?? user.currency) as Currency,
             spentAt: shiftDay(todayDay, e.daysAgo),
-            kind: e.kind,
-            incomeSource: e.incomeSource,
+            // Переключатель в приложении главнее молчания строки: человек
+            // выбрал «доход» руками. Но слово «возврат» в строке сильнее и
+            // его — оно говорит не «откуда деньги», а «что это вообще».
+            kind: e.isRefund ? e.kind : (body.kind ?? e.kind),
+            incomeSource: e.incomeSource ?? body.incomeSource ?? null,
             isRefund: e.isRefund,
           }))
       : body.amount !== undefined
@@ -314,8 +330,8 @@ app.post("/api/expenses", async (request, reply) => {
               amount: body.amount,
               currency: (body.currency ?? user.currency) as Currency,
               spentAt: body.spentAt ?? todayDay,
-              kind: "expense" as const,
-              incomeSource: null,
+              kind: body.kind ?? ("expense" as const),
+              incomeSource: body.incomeSource ?? null,
               isRefund: false,
             },
           ]
@@ -330,7 +346,7 @@ app.post("/api/expenses", async (request, reply) => {
   const corrections = await recentCorrections(user.id);
   const created = [];
 
-  let refunded = 0;
+  const refunds: { amount: number; currency: Currency; merchant: string; spentAt: string }[] = [];
 
   for (const draft of drafts) {
     // Возврат и доход разбираются так же, как в чате: правила одни, иначе одна
@@ -345,7 +361,12 @@ app.post("/api/expenses", async (request, reply) => {
       );
       if (target !== undefined) {
         await applyRefund(target.id, draft.amount);
-        refunded++;
+        refunds.push({
+          amount: draft.amount,
+          currency: draft.currency,
+          merchant: target.merchant ?? "",
+          spentAt: target.spentAt,
+        });
         continue;
       }
     }
@@ -416,9 +437,25 @@ app.post("/api/expenses", async (request, reply) => {
   // Карточка в чат — чтобы трата из приложения выглядела так же, как трата
   // из бота, и всё, что произошло, было видно в одном месте.
   for (const expense of created) {
-    // Карточка — только у расходов: доход и возврат в чате своей карточки не
-    // имеют, и рисовать им расходную было бы враньём.
-    if (expense.kind !== "expense") continue;
+    if (expense.kind === "income") {
+      const amount = Number(expense.amount);
+      const base = user.currency as Currency;
+      const baseRateValue = await rateToUsd(base, expense.spentAt);
+
+      await sendPlain(
+        BOT_TOKEN,
+        user.tgId,
+        incomeText({
+          source: expense.incomeSource ?? "Доход",
+          amount,
+          currency: expense.currency as Currency,
+          baseAmount: (amount * Number(expense.rateToUsd)) / baseRateValue,
+          baseCurrency: base,
+          dayLabel: expense.spentAt === todayDay ? "сегодня" : expense.spentAt,
+        }),
+      ).catch(() => undefined);
+      continue;
+    }
 
     const card = await buildCard(user, ledgerId, expense);
     await sendCard(BOT_TOKEN, user.tgId, user.id, expense.id, cardText(card)).catch(
@@ -426,8 +463,23 @@ app.post("/api/expenses", async (request, reply) => {
     );
   }
 
+  // Возврат в чат тоже уходит: иначе трата в приложении молча уменьшилась, и
+  // человек ищет, куда делись деньги.
+  for (const done of refunds) {
+    await sendPlain(
+      BOT_TOKEN,
+      user.tgId,
+      refundText({
+        amount: done.amount,
+        currency: done.currency,
+        merchant: done.merchant,
+        dayLabel: done.spentAt === todayDay ? "сегодня" : done.spentAt,
+      }),
+    ).catch(() => undefined);
+  }
+
   const rate = await baseRate(user, todayDay);
-  return { created: created.map((e) => serialize(e, categories, rate)), refunded };
+  return { created: created.map((e) => serialize(e, categories, rate)), refunded: refunds.length };
 });
 
 const patchSchema = z.object({
@@ -438,6 +490,7 @@ const patchSchema = z.object({
   merchant: z.string().max(128).optional(),
   note: z.string().max(500).nullable().optional(),
   payment: z.enum(["card", "cash", "transfer"]).optional(),
+  incomeSource: z.string().max(32).optional(),
 });
 
 app.get("/api/expenses/:id", async (request, reply) => {
@@ -486,6 +539,7 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   if (body.merchant !== undefined) patch["merchant"] = body.merchant;
   if (body.note !== undefined) patch["note"] = body.note;
   if (body.payment !== undefined) patch["payment"] = body.payment;
+  if (body.incomeSource !== undefined) patch["incomeSource"] = body.incomeSource;
   if (body.spentAt !== undefined) patch["spentAt"] = body.spentAt;
 
   if (body.currency !== undefined || body.spentAt !== undefined) {
@@ -737,8 +791,12 @@ app.delete("/api/rules/:id", async (request) => {
 
 app.post("/api/categories", async (request, reply) => {
   const body = z
-    .object({ title: z.string().min(1).max(64), emoji: z.string().max(8).default("🏷") })
+    .object({ title: z.string().min(1).max(64), emoji: z.string().max(8).optional() })
     .parse(request.body);
+
+  // Значок подбирается по названию: с одним значком на всех список категорий
+  // превращается в столбик одинаковых квадратов.
+  const guessed = guessIcon(body.title);
 
   // Потолок не про экономию места: с полусотней категорий разрез перестаёт
   // что-либо показывать, и дальше полезнее сливать, а не плодить.
@@ -754,7 +812,7 @@ app.post("/api/categories", async (request, reply) => {
       ledgerId: request.ledgerId,
       slug: `c${Date.now().toString(36)}`,
       title: body.title,
-      emoji: body.emoji,
+      emoji: body.emoji ?? guessed.emoji,
       sort: 100,
     })
     .returning();

@@ -71,6 +71,53 @@ async function call(token: string, method: string, body: unknown): Promise<unkno
   return response.json();
 }
 
+/**
+ * Карточка дохода.
+ *
+ * Без категорий и без итогов дня: доход не тратится и в «Потрачено» не входит,
+ * а расходная сводка рядом с ним путала бы одно с другим.
+ */
+export function incomeText(d: {
+  source: string;
+  amount: number;
+  currency: Currency;
+  baseAmount: number;
+  baseCurrency: Currency;
+  dayLabel: string;
+}): string {
+  const meta = [];
+  if (d.currency !== d.baseCurrency) meta.push(`≈ ${money(d.baseAmount, d.baseCurrency)}`);
+  meta.push(d.dayLabel);
+
+  return [
+    `<i>${escape(`Доход · ${d.source}`)}</i>`,
+    `<code>+${money(d.amount, d.currency)}</code>`,
+    `<i>${escape(meta.join(" · "))}</i>`,
+  ].join(NL);
+}
+
+/** Возврат гасит покупку — карточка говорит, какую именно. */
+export function refundText(d: {
+  amount: number;
+  currency: Currency;
+  merchant: string;
+  dayLabel: string;
+}): string {
+  return [
+    "<i>Возврат</i>",
+    `<code>+${money(d.amount, d.currency)}</code>`,
+    `<i>${escape(`погасил покупку${d.merchant === "" ? "" : ` «${d.merchant}»`} · ${d.dayLabel}`)}</i>`,
+  ].join(NL);
+}
+
+/**
+ * Сообщение без кнопок: доход и возврат нечего редактировать карточкой траты,
+ * а «отменить» у возврата означало бы вернуть покупку — это отдельный разговор.
+ */
+export async function sendPlain(token: string, chatId: string, text: string): Promise<void> {
+  await call(token, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML" });
+}
+
 /** Карточка новой траты — с теми же кнопками, что у трат из чата. */
 export async function sendCard(
   token: string,

@@ -166,7 +166,7 @@ export function Analytics({
                         className="tile"
                         style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
                       >
-                        <CategoryIcon slug={c.slug} />
+                        <CategoryIcon slug={c.slug} title={c.title} />
                       </span>
                       <span className="grow title" style={{ textAlign: "left" }}>
                         {c.title}

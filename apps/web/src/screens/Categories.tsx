@@ -24,6 +24,14 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
   const [merging, setMerging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  /**
+   * Заведение категорий подряд.
+   *
+   * Поле не прячется после сохранения и не теряет фокус: заводят их обычно
+   * пачкой, сразу после первой мысли «а вот этого не хватает».
+   */
+  const [fresh, setFresh] = useState("");
+  const [added, setAdded] = useState<string[]>([]);
 
   async function load() {
     const [cats, rls] = await Promise.all([api.categories(), api.rules()]);
@@ -35,6 +43,26 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
   useEffect(() => {
     void load().catch(() => notify("error"));
   }, []);
+
+  async function create() {
+    const title = fresh.trim();
+    if (title === "" || busy) return;
+
+    setBusy(true);
+    try {
+      await api.createCategory(title);
+      tap();
+      setFresh("");
+      setAdded((list) => [title, ...list].slice(0, 4));
+      await load();
+      onChanged();
+    } catch (e) {
+      notify("error");
+      alertError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function rename() {
     if (editing === null || busy || title.trim() === "") return;
@@ -77,6 +105,34 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
         </span>
       </div>
 
+      <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+        <input
+          className="field grow"
+          placeholder="Например, Спорт"
+          value={fresh}
+          maxLength={64}
+          onChange={(e) => setFresh(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void create();
+          }}
+        />
+        <button
+          className="pill on"
+          style={{ padding: "14px 18px" }}
+          disabled={fresh.trim() === "" || busy || rows.length >= limit}
+          onClick={() => void create()}
+        >
+          Завести
+        </button>
+      </div>
+
+      {added.length > 0 && (
+        <p className="dim" style={{ margin: "0 2px 14px" }}>
+          Завёл: {added.join(", ")}. Значок подобрал по названию — можно
+          переименовать, если не угадал.
+        </p>
+      )}
+
       <div className="card rows" style={{ padding: "2px 16px" }}>
         {rows.map((row) => {
           const color = categoryColor(row.slug, rows);
@@ -95,7 +151,7 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
                 className="tile"
                 style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
               >
-                <CategoryIcon slug={row.slug} />
+                <CategoryIcon slug={row.slug} title={row.title} />
               </span>
               <span className="grow">
                 <span className="title">{row.title}</span>

@@ -11,6 +11,9 @@ import { useBodyLock } from "./useBodyLock.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 
+/** Тот же короткий список, что и в добавлении: длинный превращается в меню. */
+const INCOME_SOURCES = ["Зарплата", "Фриланс", "Подарок", "Продажа", "Прочее"] as const;
+
 const PAYMENTS = [
   { key: "card", title: "Карта" },
   { key: "cash", title: "Наличные" },
@@ -42,6 +45,8 @@ export function ExpenseSheet({
   const [merchant, setMerchant] = useState(expense.merchant);
   const [note, setNote] = useState(expense.note ?? "");
   const [slug, setSlug] = useState(expense.category?.slug ?? null);
+  const [source, setSource] = useState(expense.incomeSource ?? "Прочее");
+  const isIncome = expense.kind === "income";
   const [picking, setPicking] = useState(false);
   const [noteOpen, setNoteOpen] = useState(expense.note !== null && expense.note !== "");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -66,7 +71,8 @@ export function ExpenseSheet({
         payment,
         merchant,
         note: note.trim() === "" ? null : note.trim(),
-        ...(slug === null ? {} : { categorySlug: slug }),
+        ...(isIncome ? { incomeSource: source } : {}),
+        ...(slug === null || isIncome ? {} : { categorySlug: slug }),
       });
       notify("success");
       onSaved();
@@ -118,7 +124,7 @@ export function ExpenseSheet({
   }
 
   return (
-    <div className="sheet" onClick={onClose}>
+    <div className="sheet fit" onClick={onClose}>
       <div
         ref={drag.ref}
         onClick={(e) => e.stopPropagation()}
@@ -143,11 +149,15 @@ export function ExpenseSheet({
               borderColor: tint(color, 0.24),
             }}
           >
-            <CategoryIcon slug={slug ?? undefined} size={22} />
+            <CategoryIcon
+              slug={isIncome ? "income" : (slug ?? undefined)}
+              {...(category === null ? {} : { title: category.title })}
+              size={22}
+            />
           </span>
           <span className="grow">
             <span className="title" style={{ fontSize: 17 }}>
-              {merchant === "" ? (category?.title ?? "Трата") : merchant}
+              {merchant === "" ? (isIncome ? source : (category?.title ?? "Трата")) : merchant}
             </span>
             <span className="sub">{provenance(expense)}</span>
           </span>
@@ -199,22 +209,41 @@ export function ExpenseSheet({
           ))}
         </div>
 
+        {/* У дохода вместо категории источник: категории отвечают на вопрос
+            «куда ушли деньги», а к пришедшим он не относится. */}
         <p className="label" style={{ marginBottom: 8 }}>
-          Категория
+          {isIncome ? "Источник" : "Категория"}
         </p>
-        <button
-          className="field row"
-          style={{ marginBottom: 15, textAlign: "left" }}
-          onClick={() => {
-            tap();
-            setPicking(true);
-          }}
-        >
-          <span className="grow">{category?.title ?? "Выбрать категорию"}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </button>
+        {isIncome ? (
+          <div className="chips" style={{ marginBottom: 15 }}>
+            {INCOME_SOURCES.map((title) => (
+              <button
+                key={title}
+                className={title === source ? "pill on" : "pill ghost"}
+                onClick={() => {
+                  tap();
+                  setSource(title);
+                }}
+              >
+                {title}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            className="field row"
+            style={{ marginBottom: 15, textAlign: "left" }}
+            onClick={() => {
+              tap();
+              setPicking(true);
+            }}
+          >
+            <span className="grow">{category?.title ?? "Выбрать категорию"}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
+        )}
 
         <p className="label" style={{ marginBottom: 8 }}>
           Дата
@@ -227,10 +256,10 @@ export function ExpenseSheet({
           style={{ marginBottom: 15 }}
         />
 
-        <p className="label" style={{ marginBottom: 8 }}>
+        <p className="label" style={{ marginBottom: 8 }} hidden={isIncome}>
           Оплата
         </p>
-        <div className="seg" style={{ marginBottom: 15 }}>
+        <div className="seg" style={{ marginBottom: 15 }} hidden={isIncome}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}
@@ -286,7 +315,9 @@ export function ExpenseSheet({
         )}
 
         <button className="cta mint" disabled={!canSave || busy} onClick={() => void save()}>
-          {busy ? "Сохраняю…" : `Сохранить ${moneyExact(canSave ? parsedAmount : 0, currency)}`}
+          {busy
+            ? "Сохраняю…"
+            : `Сохранить ${isIncome ? "+" : ""}${moneyExact(canSave ? parsedAmount : 0, currency)}`}
         </button>
 
       </div>
@@ -297,6 +328,8 @@ export function ExpenseSheet({
 /** Откуда взялась категория — видно, кому верить: правилу, модели или себе. */
 function provenance(expense: Expense): string {
   const where = expense.source === "bot" ? "из чата" : "из приложения";
+  // У дохода категории нет вовсе, и говорить про неё было бы странно.
+  if (expense.kind === "income") return `${where} · доход`;
   if (expense.needsReview) return `${where} · категория временная`;
   if (expense.confidence === null) return `${where} · категория по твоему правилу`;
   return `${where} · категорию предложила модель`;

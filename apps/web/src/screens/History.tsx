@@ -243,6 +243,7 @@ export function History({
                 >
                   <CategoryIcon
                     slug={expense.kind === "income" ? "income" : expense.category?.slug}
+                    {...(expense.category === null ? {} : { title: expense.category.title })}
                   />
                 </span>
                 <span className="grow">
