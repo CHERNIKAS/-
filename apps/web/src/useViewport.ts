@@ -1,22 +1,26 @@
 import { useEffect } from "react";
 
 /**
- * Высота видимой части экрана в CSS-переменной.
+ * Высота клавиатуры в CSS-переменной.
  *
- * Единицы dvh не знают про клавиатуру: она закрывает половину экрана, а
- * 92dvh остаются теми же 92% всего экрана. Шторка оказывается выше доступного
- * места, внутри появляется прокрутка — и любое касание её дёргает, хотя
- * листать там нечего.
+ * Шторка не должна менять свой размер от того, что появилась клавиатура —
+ * иначе она прыгает при каждом касании поля. Правильное поведение то же, что
+ * у обычных приложений: размер свой, а клавиатура просто поднимает её выше.
  *
- * visualViewport знает про клавиатуру точно, поэтому шторка меряется по нему.
+ * Сколько занимает клавиатура, знает только visualViewport: обычная высота
+ * окна при её появлении не меняется.
  */
 export function useViewport(): void {
   useEffect(() => {
     const viewport = window.visualViewport;
 
     function apply(): void {
-      const height = viewport?.height ?? window.innerHeight;
-      document.documentElement.style.setProperty("--vvh", `${Math.round(height)}px`);
+      const visible = viewport?.height ?? window.innerHeight;
+      const keyboard = Math.max(0, Math.round(window.innerHeight - visible));
+
+      // Мелочь в пару пикселей — это адресная строка и прочая мелкая возня
+      // браузера, а не клавиатура: сдвигать из-за неё шторку не надо.
+      document.documentElement.style.setProperty("--kb", keyboard > 80 ? `${keyboard}px` : "0px");
     }
 
     apply();

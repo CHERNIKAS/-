@@ -123,7 +123,7 @@ export function Add({
   }
 
   return (
-    <div className="sheet" onClick={onClose}>
+    <div className="sheet fit" onClick={onClose}>
       <div
         ref={drag.ref}
         onClick={(e) => e.stopPropagation()}
