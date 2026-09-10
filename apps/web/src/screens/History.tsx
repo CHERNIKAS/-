@@ -22,6 +22,7 @@ const PAYMENT_TITLE: Record<string, string> = {
  */
 export function History({
   focus,
+  onFocusApplied,
   categories,
   today,
   currency,
@@ -30,6 +31,8 @@ export function History({
 }: {
   /** Категория и период, с которыми пришли из разбора. */
   focus: { category: string; range: Range } | null;
+  /** Фильтр применён — дальше он живёт своей жизнью и его можно снять. */
+  onFocusApplied: () => void;
   categories: { slug: string; title: string; emoji: string }[];
   today: string;
   currency: string;
@@ -48,9 +51,14 @@ export function History({
   // открывается сразу на том, по чему нажали, а не на своих настройках.
   useEffect(() => {
     if (focus === null) return;
+
     setCategory(focus.category);
     setRange(focus.range);
-  }, [focus]);
+
+    // Одноразовый: снятый фильтр возвращался при возврате на вкладку, потому
+    // что переход из разбора всё ещё висел в состоянии и применялся заново.
+    onFocusApplied();
+  }, [focus, onFocusApplied]);
 
   useEffect(() => {
     let alive = true;
@@ -152,10 +160,17 @@ export function History({
           )}
         </button>
 
-        <span className="num" style={{ fontSize: 17, fontWeight: 600 }}>
-          {money(total, currency)}
+        {/* Подписи обязательны: два числа подряд у фильтра читались как
+            что угодно — то ли остаток, то ли лимит. */}
+        <span style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <span className="dim" style={{ fontSize: 13 }}>
+            потрачено
+          </span>
+          <span className="num" style={{ fontSize: 17, fontWeight: 600 }}>
+            {money(total, currency)}
+          </span>
           {income > 0 && (
-            <span className="sub" style={{ display: "block", color: "var(--mint)" }}>
+            <span className="num" style={{ fontSize: 13, color: "var(--mint)" }}>
               +{money(income, currency)}
             </span>
           )}

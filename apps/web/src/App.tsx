@@ -45,19 +45,30 @@ export function App() {
   const [focus, setFocus] = useState<{ category: string; range: Range } | null>(null);
 
   /**
+   * Пришли ли в историю из разбора.
+   *
+   * Отдельно от самого перехода: фильтр применяется один раз и дальше живёт
+   * своей жизнью — его можно снять, — а кнопка «назад» должна оставаться,
+   * пока человек не ушёл из истории сам.
+   */
+  const [fromStats, setFromStats] = useState(false);
+
+  /**
    * Штатная кнопка «назад» в шапке Telegram.
    *
    * Провалившись из разбора в категорию, человек оказывается в истории с
    * чужим фильтром, и выйти оттуда было нечем: снизу вкладки, сверху ничего.
    */
   useEffect(() => {
-    if (focus === null || tab !== "history") return;
+    if (!fromStats || tab !== "history") return;
 
     return backButton(true, () => {
-      setFocus(null);
+      setFromStats(false);
       setTab("stats");
     });
-  }, [focus, tab]);
+  }, [fromStats, tab]);
+
+  const clearFocus = useCallback(() => setFocus(null), []);
 
   // Клавиатура меняет видимую высоту, и шторки должны мериться по ней.
   useViewport();
@@ -127,6 +138,7 @@ export function App() {
           today={state.today}
           onCategory={(category, range) => {
             setFocus({ category, range });
+            setFromStats(true);
             setTab("history");
           }}
         />
@@ -134,6 +146,7 @@ export function App() {
       {tab === "history" && (
         <History
           focus={focus}
+          onFocusApplied={clearFocus}
           categories={state.categories}
           today={state.today}
           currency={state.user.currency}
@@ -223,6 +236,7 @@ export function App() {
             className={tab === key ? "active" : ""}
             onClick={() => {
               tap();
+              setFromStats(false);
               setTab(key);
             }}
           >
@@ -252,6 +266,7 @@ export function App() {
             className={tab === key ? "active" : ""}
             onClick={() => {
               tap();
+              if (key !== "history") setFromStats(false);
               setTab(key);
             }}
           >

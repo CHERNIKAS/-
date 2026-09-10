@@ -127,7 +127,12 @@ export function Add({
       <div
         ref={drag.ref}
         onClick={(e) => e.stopPropagation()}
-        style={{ position: "relative", ...drag.sheetStyle }}
+        style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          ...drag.sheetStyle,
+        }}
       >
         <div className="grabber" />
 
@@ -221,7 +226,7 @@ export function Add({
                 if (e.key === "Enter") void save();
               }}
             />
-            <p className="dim" style={{ margin: "0 2px 16px" }}>
+            <p className="dim" style={{ margin: "14px 2px 0" }}>
               Пиши как удобно: сумму, валюту и день пойму сам.
               {kind === "expense" && " Категорию подберу тоже."}
               {currency !== defaultCurrency && ` Без валюты запишу в ${currency}.`}
@@ -271,7 +276,9 @@ export function Add({
           </>
         )}
 
-        <div className="row" style={{ gap: 10 }}>
+        {/* Кнопка внизу шторки, а не сразу под полем: с открытой клавиатурой
+            она оказывается прямо над ней, а с закрытой — там, где палец. */}
+        <div className="row" style={{ gap: 10, marginTop: "auto", paddingTop: 8 }}>
           <button
             className="pill"
             style={{ padding: "14px 16px" }}

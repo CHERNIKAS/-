@@ -161,7 +161,7 @@ export function Categories({
 
       {side === "expense" && (
         <>
-        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
           <input
             className="field grow"
             placeholder="Например, Спорт"
@@ -225,7 +225,7 @@ export function Categories({
 
       {side === "income" && (
         <>
-        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
           <input
             className="field grow"
             placeholder="Например, Аренда"
@@ -257,7 +257,7 @@ export function Categories({
 
         {/* Такие же карточки, как у категорий: источник — это тоже строка со
             своим значком, и выглядеть по-другому ей не за что. */}
-        <div className="card rows" style={{ padding: "2px 16px", marginBottom: 14 }}>
+        <div className="card rows" style={{ padding: "2px 16px" }}>
           {incomeSources.map((title, index) => {
             const color = PALETTE[index % PALETTE.length] as string;
             const stat = sources.find((r) => r.title === title);
