@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { money } from "../format.js";
+import { guessIcon, PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 import { notify, tap } from "../telegram.js";
@@ -27,6 +28,7 @@ export function Categories({
   const [rows, setRows] = useState<Row[]>([]);
   const [limit, setLimit] = useState(50);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [sources, setSources] = useState<{ title: string; count: number; total: number }[]>([]);
   const [editing, setEditing] = useState<Row | null>(null);
   const [title, setTitle] = useState("");
   const [merging, setMerging] = useState(false);
@@ -53,6 +55,7 @@ export function Categories({
   async function load() {
     const [cats, rls] = await Promise.all([api.categories(), api.rules()]);
     setRows(cats.categories);
+    setSources(cats.sources);
     setLimit(cats.limit);
     setRules(rls.rules);
   }
@@ -222,22 +225,46 @@ export function Categories({
 
       {side === "income" && (
         <>
-        <div className="chips" style={{ marginBottom: 12 }}>
-          {incomeSources.map((title) => (
-            <button
-              key={title}
-              className="pill"
-              onClick={() => {
-                tap();
-                void saveSources(incomeSources.filter((t) => t !== title));
-              }}
-            >
-              {title}
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
-          ))}
+        {/* Такие же карточки, как у категорий: источник — это тоже строка со
+            своим значком, и выглядеть по-другому ей не за что. */}
+        <div className="card rows" style={{ padding: "2px 16px", marginBottom: 14 }}>
+          {incomeSources.map((title, index) => {
+            const color = PALETTE[index % PALETTE.length] as string;
+            const stat = sources.find((r) => r.title === title);
+            return (
+              <div key={title} className="item">
+                <span
+                  className="tile"
+                  style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
+                >
+                  <CategoryIcon slug={sourceIcon(title)} />
+                </span>
+                <span className="grow">
+                  <span className="title">{title}</span>
+                  <span className="sub">
+                    {stat === undefined || stat.count === 0
+                      ? "за 30 дней поступлений нет"
+                      : `${stat.count} поступлений за 30 дней`}
+                  </span>
+                </span>
+                <span className="amount" style={{ marginRight: 10 }}>
+                  {stat === undefined || stat.total === 0 ? "—" : money(stat.total, currency)}
+                </span>
+                <button
+                  className="danger-square"
+                  aria-label={`Убрать ${title}`}
+                  onClick={() => {
+                    tap();
+                    void saveSources(incomeSources.filter((t) => t !== title));
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 7h16M9.5 7V5h5v2M6.5 7l1 12.5h9L17.5 7" />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         <div className="row" style={{ gap: 8, marginBottom: 4 }}>
@@ -391,4 +418,16 @@ export function Categories({
 
 function alertError(e: unknown): void {
   if (e instanceof Error) console.error(e.message);
+}
+
+/**
+ * Значок источника.
+ *
+ * Названия у источников свои — «Аренда», «Продажи», — и таблица значков
+ * угадывает их так же, как у категорий. Не угадала — стрелка прихода, а не
+ * безликий ромбик.
+ */
+function sourceIcon(title: string): string {
+  const guessed = guessIcon(title).icon;
+  return guessed === "other" ? "income" : guessed;
 }

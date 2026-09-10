@@ -709,10 +709,37 @@ app.get("/api/categories", async (request) => {
     )
     .groupBy(schema.expenses.categoryId);
 
+  // Те же цифры для источников дохода: без них строка источника выглядела бы
+  // недоделанной рядом с категорией, у которой есть и сумма, и счётчик.
+  const incomes = await db
+    .select({
+      source: schema.expenses.incomeSource,
+      count: sql<string>`count(*)`,
+      total: sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`,
+    })
+    .from(schema.expenses)
+    .where(
+      and(
+        eq(schema.expenses.ledgerId, ledgerId),
+        eq(schema.expenses.kind, "income"),
+        gte(schema.expenses.spentAt, from),
+        isNull(schema.expenses.deletedAt),
+      ),
+    )
+    .groupBy(schema.expenses.incomeSource);
+
   const rate = await baseRate(request.user, todayDay);
 
   return {
     limit: MAX_CATEGORIES,
+    sources: incomeSourcesOf(request.user).map((title) => {
+      const stat = incomes.find((r) => r.source === title);
+      return {
+        title,
+        count: Number(stat?.count ?? 0),
+        total: Number(stat?.total ?? 0) / rate,
+      };
+    }),
     categories: categories.map((c) => {
       const stat = counts.find((r) => r.categoryId === c.id);
       return {

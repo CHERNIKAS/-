@@ -182,7 +182,11 @@ export const api = {
     request<{ ok: true }>(`/ledgers/members/${userId}`, { method: "DELETE" }),
 
   categories: () =>
-    request<{ limit: number; categories: { slug: string; title: string; emoji: string; count: number; total: number }[] }>(
+    request<{
+      limit: number;
+      categories: { slug: string; title: string; emoji: string; count: number; total: number }[];
+      sources: { title: string; count: number; total: number }[];
+    }>(
       "/categories",
     ),
 
