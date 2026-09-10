@@ -286,8 +286,9 @@ async function runWeekly(api: Api, users: AppUser[], now: Date): Promise<void> {
 
     const base = user.currency as Currency;
     const rate = await rateToUsd(base, day);
-    const period = { from: shiftDay(day, 7), to: shiftDay(day, 1), label: "неделя" };
-    const previous = { from: shiftDay(day, 14), to: shiftDay(day, 8), label: "прошлая" };
+    // Понедельник, значит вчера неделя закончилась: считаем ровно её.
+    const period = { from: shiftDay(day, 7), to: shiftDay(day, 1), label: "прошлая неделя" };
+    const previous = { from: shiftDay(day, 14), to: shiftDay(day, 8), label: "позапрошлая" };
 
     const [total, before, categories] = await Promise.all([
       totalUsd(ledgerId, period),

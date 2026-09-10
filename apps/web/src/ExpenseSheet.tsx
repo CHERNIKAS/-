@@ -113,14 +113,13 @@ export function ExpenseSheet({
       >
         <div className="grabber" />
 
-
         {error !== null && (
           <div className="err" style={{ marginBottom: 14 }}>
             {error}
           </div>
         )}
 
-        <div className="row" style={{ marginBottom: 18 }}>
+        <div className="row" style={{ marginBottom: 16 }}>
           <span
             className="tile"
             style={{
@@ -149,16 +148,18 @@ export function ExpenseSheet({
           inputMode="decimal"
           value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
-          style={{ marginBottom: 10 }}
+          style={{ marginBottom: 8 }}
         />
 
         {/* Валюты отдельной строкой: рядом с полем они не помещались и
-            растягивали шторку вширь, унося вбок весь экран. */}
-        <div className="scroller equal" style={{ marginBottom: 18 }}>
+            растягивали шторку вширь, унося вбок весь экран. Единым
+            переключателем, а не россыпью кнопок разной ширины — иначе строка
+            выбивается из ровной колонки полей. */}
+        <div className="seg" style={{ marginBottom: 16 }}>
           {CURRENCIES.map((code) => (
             <button
               key={code}
-              className={code === currency ? "pill on" : "pill ghost"}
+              className={code === currency ? "on" : ""}
               onClick={() => {
                 tap();
                 setCurrency(code);
@@ -174,7 +175,7 @@ export function ExpenseSheet({
         </p>
         <button
           className="field row"
-          style={{ marginBottom: 18, textAlign: "left" }}
+          style={{ marginBottom: 16, textAlign: "left" }}
           onClick={() => {
             tap();
             setPicking(true);
@@ -194,17 +195,17 @@ export function ExpenseSheet({
           type="date"
           value={spentAt}
           onChange={(e) => setSpentAt(e.target.value)}
-          style={{ marginBottom: 18 }}
+          style={{ marginBottom: 16 }}
         />
 
         <p className="label" style={{ marginBottom: 8 }}>
           Оплата
         </p>
-        <div className="scroller equal" style={{ marginBottom: 18 }}>
+        <div className="seg" style={{ marginBottom: 16 }}>
           {PAYMENTS.map((p) => (
             <button
               key={p.key}
-              className={p.key === payment ? "pill on" : "pill ghost"}
+              className={p.key === payment ? "on" : ""}
               onClick={() => {
                 tap();
                 setPayment(p.key);
@@ -223,7 +224,7 @@ export function ExpenseSheet({
           value={merchant}
           placeholder="где потратил"
           onChange={(e) => setMerchant(e.target.value)}
-          style={{ marginBottom: 18 }}
+          style={{ marginBottom: 16 }}
         />
 
         <p className="label" style={{ marginBottom: 8 }}>
@@ -234,7 +235,7 @@ export function ExpenseSheet({
           value={note}
           placeholder="подарок Ане, закупка на неделю"
           onChange={(e) => setNote(e.target.value)}
-          style={{ marginBottom: 22 }}
+          style={{ marginBottom: 20 }}
         />
 
         <button className="cta mint" disabled={!canSave || busy} onClick={() => void save()}>

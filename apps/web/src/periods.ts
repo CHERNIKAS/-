@@ -28,7 +28,7 @@ export function rangeFor(key: PeriodKey, today: string, custom?: { from: string;
     case "day":
       return { key, from: today, to: today };
     case "week":
-      return { key, from: shiftDay(today, 6), to: today };
+      return { key, from: weekStart(today), to: today };
     case "month":
       return { key, from: `${today.slice(0, 7)}-01`, to: today };
     case "year":
@@ -40,6 +40,12 @@ export function rangeFor(key: PeriodKey, today: string, custom?: { from: string;
         to: custom?.to ?? today,
       };
   }
+}
+
+/** Понедельник текущей недели: неделя календарная, как и месяц. */
+function weekStart(today: string): string {
+  const date = new Date(`${today}T00:00:00Z`);
+  return shiftDay(today, (date.getUTCDay() + 6) % 7);
 }
 
 export function rangeTitle(range: Range): string {

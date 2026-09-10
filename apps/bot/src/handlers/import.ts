@@ -1,5 +1,5 @@
 import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule } from "@costnote/core";
-import { applyMapping, detectMapping, readStatement } from "@costnote/core/import";
+import { applyMapping, describesMerchants, detectMapping, readStatement } from "@costnote/core/import";
 import {
   type AppUser,
   createImportPreview,
@@ -131,6 +131,8 @@ export async function handleDocument(
       parsed.incomes > 0 ? `<i>${parsed.incomes} приходов и переводов — не беру</i>` : "",
       parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
+      // Про отсутствие названий честнее предупредить до импорта, а не после.
+      describesMerchants(fresh) ? "" : `<i>в файле нет названий операций — категории проставить не из чего</i>`,
     ].filter((line) => line !== "");
 
     await ctx.api.editMessageText(status.chat.id, status.message_id, lines.join(NL), {

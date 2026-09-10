@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { CURRENCIES, type Currency, matchCurrency } from "../currencies.js";
 import type { Mapping } from "./detect.js";
 import type { Sheet } from "./read.js";
+import { looksAccepted, looksRejected } from "./statuses.js";
 
 /**
  * Применение карты формата к строкам файла.
@@ -41,9 +42,9 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
 
     // Отменённая операция денег не двигала: в выписках их бывают десятки, и
     // посчитать их тратами — самый простой способ раздуть месяц вдвое.
-    if (mapping.statusColumn !== null && mapping.okStatuses.length > 0) {
-      const status = (raw[mapping.statusColumn] ?? "").trim().toLowerCase();
-      if (status !== "" && !mapping.okStatuses.some((ok) => ok.toLowerCase() === status)) {
+    if (mapping.statusColumn !== null) {
+      const status = (raw[mapping.statusColumn] ?? "").trim();
+      if (status !== "" && !accepted(status, mapping.okStatuses)) {
         cancelled++;
         continue;
       }
@@ -90,6 +91,50 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
   }
 
   return { rows, skipped, incomes, cancelled };
+}
+
+/**
+ * Считается ли операция с таким состоянием состоявшейся.
+ *
+ * Модель называет допустимые значения сама, но ошибиться ей есть где: колонок
+ * со словами в выписке несколько, а формулировки у банков свои. Поэтому её
+ * ответ дополнен словарём, и слово отказа перевешивает: пропущенная трата
+ * заметна и добавляется руками, а лишняя молча раздувает месяц.
+ */
+function accepted(status: string, okStatuses: string[]): boolean {
+  if (looksRejected(status)) return false;
+  if (looksAccepted(status)) return true;
+
+  const clean = status.toLowerCase();
+  if (okStatuses.length === 0) return true;
+
+  return okStatuses.some((ok) => ok.trim().toLowerCase() === clean);
+}
+
+/**
+ * Есть ли в строках настоящие названия операций.
+ *
+ * Выписка криптокошелька выглядит как обычная таблица, но в колонке описания
+ * у неё два слова на тысячу строк — WITHDRAW и SWAP. Категории из такого не
+ * достать ничем: ни правилами, ни моделью. Лучше сказать об этом до импорта,
+ * чем оставить человека с тысячей одинаковых «Прочее».
+ *
+ * Это подсказка, а не запрет: короткая выписка из десяти покупок в одном
+ * магазине тоже даст мало разных названий, и импортировать её всё равно нужно.
+ */
+export function describesMerchants(rows: ImportedRow[]): boolean {
+  if (rows.length < 30) return true;
+
+  const names = new Set<string>();
+  for (const row of rows) {
+    const name = row.description.trim().toLowerCase();
+    if (name !== "") names.add(name);
+  }
+
+  // Пустых названий больше половины — брать категории неоткуда.
+  if (names.size === 0) return false;
+
+  return names.size >= Math.max(5, rows.length * 0.05);
 }
 
 /** Отпечаток строки: одинаковые операции из одного файла не задваиваются. */

@@ -11,6 +11,12 @@ export const PERIOD_TITLE: Record<PeriodKey, string> = {
   year: "Год",
 };
 
+/** Понедельник текущей недели: неделя календарная, как и месяц. */
+function weekStart(today: string): string {
+  const date = new Date(`${today}T00:00:00Z`);
+  return shift(today, (date.getUTCDay() + 6) % 7);
+}
+
 function shift(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - days);
@@ -23,7 +29,7 @@ export function buildPeriod(key: PeriodKey, today: string): Period {
       return { from: today, to: today, label: "сегодня" };
 
     case "week":
-      return { from: shift(today, 6), to: today, label: "7 дней" };
+      return { from: weekStart(today), to: today, label: "эта неделя" };
 
     case "month":
       return { from: `${today.slice(0, 7)}-01`, to: today, label: "этот месяц" };

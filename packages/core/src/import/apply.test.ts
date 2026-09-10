@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyMapping, parseAmount, parseDate } from "./apply.js";
 import type { Mapping } from "./detect.js";
 import { readCsv } from "./read.js";
+import { looksRejected } from "./statuses.js";
 
 const TODAY = "2026-09-09";
 
@@ -144,6 +145,31 @@ describe("applyMapping", () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]?.description).toBe("MIGROS");
     expect(result.cancelled).toBe(2);
+  });
+
+  it("отказ распознаётся, даже если модель не назвала его в okStatuses", () => {
+    const withStatus = [
+      ["Дата", "Сумма", "Описание", "Статус"],
+      ["03.09.2026", "-1 500,00", "MIGROS", "Виконано"],
+      ["04.09.2026", "-120,50", "STARBUCKS", "Скасовано банком"],
+      ["05.09.2026", "-80,00", "BIM", "iptal edildi"],
+    ];
+
+    const result = applyMapping(
+      withStatus,
+      { ...MAPPING, statusColumn: 3, okStatuses: ["DONE"] },
+      TODAY,
+    );
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.description).toBe("MIGROS");
+    expect(result.cancelled).toBe(2);
+  });
+
+  it("состояния со словом внутри другого слова не считаются отказом", () => {
+    expect(looksRejected("Cleared")).toBe(false);
+    expect(looksRejected("Renewal")).toBe(false);
+    expect(looksRejected("CANCELED BY USER")).toBe(true);
   });
 
   it("без колонки статуса ничего не отбрасывается", () => {

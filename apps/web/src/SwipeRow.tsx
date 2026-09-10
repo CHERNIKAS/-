@@ -1,16 +1,23 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tap } from "./telegram.js";
 
 /**
  * Строка, которую можно смахнуть влево.
  *
- * Карточка уходит за пальцем и улетает, а подтверждение спрашивается по
- * центру экрана. Кнопки под строкой нет намеренно: она занимает место, видна
- * до всякого жеста и превращает смахивание в лишний шаг перед нажатием.
+ * Карточка идёт за пальцем и улетает, а подтверждение спрашивается по центру
+ * экрана. Кнопки под строкой нет намеренно: она занимает место, видна до
+ * всякого жеста и превращает смахивание в лишний шаг перед нажатием.
+ *
+ * Во время жеста transform пишется прямо в стиль узла, без состояния React:
+ * рендер на каждое движение пальца — это те самые рывки, из-за которых свайп
+ * ощущается дёрганым.
  */
 
 /** Дальше этого отпускание считается смахиванием, а не случайным движением. */
 const THRESHOLD = 96;
+
+/** Наклон при уходе — от него жест читается как карточка, а не как полоска. */
+const TILT = 0.04;
 
 export function SwipeRow({
   children,
@@ -20,87 +27,116 @@ export function SwipeRow({
   /** Вызывается после того, как строка улетела. reset возвращает её на место. */
   onSwipe: (reset: () => void) => void;
 }) {
-  const [offset, setOffset] = useState(0);
-  const [flown, setFlown] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const node = useRef<HTMLDivElement | null>(null);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const horizontal = useRef(false);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const ref = useCallback((element: HTMLDivElement | null) => setNode(element), []);
+  const offset = useRef(0);
 
-  /**
-   * Слушатель ставится вручную, потому что React вешает touchmove пассивно, а
-   * без preventDefault страница уезжает вместе со строкой.
-   */
+  const reset = useCallback(() => {
+    if (node === null) return;
+    node.style.transition = "transform .32s cubic-bezier(.22,.9,.3,1), opacity .32s ease, max-height .32s ease";
+    node.style.transform = "";
+    node.style.opacity = "1";
+    node.style.maxHeight = "";
+    offset.current = 0;
+  }, [node]);
+
   useEffect(() => {
-    const element = node.current;
-    if (element === null) return;
+    if (node === null) return;
+
+    let startX = 0;
+    let startY = 0;
+    let active = false;
+    let frame = 0;
+
+    function paint(dx: number) {
+      if (node === null) return;
+      // Наклон и прозрачность считаются от смещения, поэтому карточка
+      // «оживает» постепенно, а не переключается между двумя состояниями.
+      node.style.transform = `translateX(${dx}px) rotate(${dx * TILT}deg)`;
+      node.style.opacity = String(Math.max(0.35, 1 + dx / 520));
+    }
+
+    function onStart(event: TouchEvent) {
+      const touch = event.touches[0];
+      if (touch === undefined || node === null) return;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      active = false;
+      node.style.transition = "none";
+    }
 
     function onMove(event: TouchEvent) {
       const touch = event.touches[0];
-      if (touch === undefined || start.current === null) return;
+      if (touch === undefined) return;
 
-      const dx = touch.clientX - start.current.x;
-      const dy = touch.clientY - start.current.y;
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
 
-      if (!horizontal.current && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-        horizontal.current = true;
-        setDragging(true);
+      if (!active) {
+        if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+        active = true;
       }
 
-      if (!horizontal.current) return;
-
       event.preventDefault();
-      setOffset(Math.min(0, dx));
+      offset.current = Math.min(0, dx);
+
+      // Рисуем раз в кадр: несколько событий подряд между кадрами всё равно
+      // видны одним движением, а лишняя работа делает жест тяжёлым.
+      if (frame !== 0) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        paint(offset.current);
+      });
     }
 
-    element.addEventListener("touchmove", onMove, { passive: false });
-    return () => element.removeEventListener("touchmove", onMove);
-  }, []);
+    function onEnd() {
+      if (!active || node === null) return;
+      active = false;
 
-  function onTouchStart(event: React.TouchEvent) {
-    const touch = event.touches[0];
-    if (touch === undefined || flown) return;
-    start.current = { x: touch.clientX, y: touch.clientY };
-    horizontal.current = false;
-  }
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
 
-  function onTouchEnd() {
-    start.current = null;
-    setDragging(false);
+      if (offset.current > -THRESHOLD) {
+        node.style.transition = "transform .28s cubic-bezier(.22,.9,.3,1), opacity .28s ease";
+        node.style.transform = "";
+        node.style.opacity = "1";
+        offset.current = 0;
+        return;
+      }
 
-    if (!horizontal.current) return;
-    horizontal.current = false;
+      tap("medium");
+      node.style.transition = "transform .26s cubic-bezier(.4,0,.6,1), opacity .26s ease, max-height .26s ease .06s";
+      node.style.transform = `translateX(${-window.innerWidth}px) rotate(${-window.innerWidth * TILT}deg)`;
+      node.style.opacity = "0";
+      node.style.maxHeight = "0px";
 
-    if (offset > -THRESHOLD) {
-      setOffset(0);
-      return;
+      onSwipe(reset);
     }
 
-    tap("medium");
-    setFlown(true);
-    setOffset(-window.innerWidth);
-    onSwipe(() => {
-      setFlown(false);
-      setOffset(0);
-    });
-  }
+    node.addEventListener("touchstart", onStart, { passive: true });
+    node.addEventListener("touchmove", onMove, { passive: false });
+    node.addEventListener("touchend", onEnd);
+    node.addEventListener("touchcancel", onEnd);
 
-  // Пока строка улетает, она освобождает место плавно, а не рывком.
-  const collapsed = flown ? { maxHeight: 0, opacity: 0 } : {};
+    return () => {
+      node.removeEventListener("touchstart", onStart);
+      node.removeEventListener("touchmove", onMove);
+      node.removeEventListener("touchend", onEnd);
+      node.removeEventListener("touchcancel", onEnd);
+      if (frame !== 0) cancelAnimationFrame(frame);
+    };
+  }, [node, onSwipe, reset]);
 
   return (
     <div
-      ref={node}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={onTouchEnd}
+      ref={ref}
       style={{
         touchAction: "pan-y",
         overflow: "hidden",
-        transform: `translateX(${offset}px)`,
-        opacity: flown ? 0 : 1 + Math.max(-0.6, offset / 400),
-        transition: dragging ? "none" : "transform .22s ease, opacity .22s ease, max-height .22s ease",
-        ...collapsed,
+        willChange: "transform",
+        transition: "transform .28s cubic-bezier(.22,.9,.3,1), opacity .28s ease",
       }}
     >
       {children}
