@@ -163,6 +163,15 @@ export const expenses = pgTable(
       .notNull()
       .default("0"),
     refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    /** Какой импорт погасил покупку — по нему же откат импорта её и вернёт. */
+    refundImportId: integer("refund_import_id"),
+    /**
+     * Отпечаток строки возврата.
+     *
+     * Повторный импорт того же файла не должен гасить покупки во второй раз:
+     * траты от задвоения защищает свой отпечаток, возвраты — этот.
+     */
+    refundFingerprint: varchar("refund_fingerprint", { length: 64 }),
 
     /** Уверенность модели, 0..1. null — категорию поставило правило пользователя. */
     confidence: numeric({ precision: 3, scale: 2 }),

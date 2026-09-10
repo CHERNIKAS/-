@@ -91,8 +91,16 @@ export function History({
     return [...byDay.entries()];
   }, [expenses, query]);
 
+  // Итог периода — только расходы и только за вычетом возвратов: доход,
+  // попадавший в ту же сумму, делал её больше настоящей траты.
   const total = groups.reduce(
-    (sum, [, list]) => sum + list.reduce((s, e) => s + e.base, 0),
+    (sum, [, list]) =>
+      sum + list.reduce((s, e) => s + (e.kind === "expense" ? e.netBase : 0), 0),
+    0,
+  );
+
+  const income = groups.reduce(
+    (sum, [, list]) => sum + list.reduce((s, e) => s + (e.kind === "income" ? e.base : 0), 0),
     0,
   );
 
@@ -146,6 +154,11 @@ export function History({
 
         <span className="num" style={{ fontSize: 17, fontWeight: 600 }}>
           {money(total, currency)}
+          {income > 0 && (
+            <span className="sub" style={{ display: "block", color: "var(--mint)" }}>
+              +{money(income, currency)}
+            </span>
+          )}
         </span>
       </div>
 
@@ -210,7 +223,7 @@ export function History({
             <span className="label">{dayTitle(day, today)}</span>
             <span className="dim num">
               {money(
-                list.reduce((sum, e) => sum + e.base, 0),
+                list.reduce((sum, e) => sum + (e.kind === "expense" ? e.netBase : 0), 0),
                 currency,
               )}
             </span>
@@ -228,15 +241,30 @@ export function History({
                     borderColor: tint(categoryColor(expense.category?.slug, categories), 0.24),
                   }}
                 >
-                  <CategoryIcon slug={expense.category?.slug} />
+                  <CategoryIcon
+                    slug={expense.kind === "income" ? "income" : expense.category?.slug}
+                  />
                 </span>
                 <span className="grow">
                   <span className="title">
-                    {expense.merchant === "" ? (expense.category?.title ?? "Трата") : expense.merchant}
+                    {expense.merchant === ""
+                      ? (expense.incomeSource ?? expense.category?.title ?? "Трата")
+                      : expense.merchant}
                   </span>
-                  <span className="sub">{expense.category?.title ?? "без категории"}</span>
+                  <span className="sub">
+                    {expense.kind === "income"
+                      ? (expense.incomeSource ?? "доход")
+                      : (expense.category?.title ?? "без категории")}
+                    {expense.refunded > 0
+                      ? ` · вернули ${moneyExact(expense.refunded, expense.currency)}`
+                      : ""}
+                  </span>
                 </span>
-                <span className="amount">
+                <span
+                  className="amount"
+                  style={expense.kind === "income" ? { color: "var(--mint)" } : undefined}
+                >
+                  {expense.kind === "income" ? "+" : ""}
                   {moneyExact(expense.amount, expense.currency)}
                   {expense.currency !== currency && (
                     <span className="sub" style={{ display: "block" }}>

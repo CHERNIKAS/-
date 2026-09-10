@@ -4,6 +4,7 @@ import {
   type AppUser,
   applyRefund,
   createImportPreview,
+  refundAlreadyApplied,
   db,
   findRefundTarget,
   importCredits,
@@ -244,6 +245,9 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   // возврата и покупки в выписке обычно разные.
   let refunded = 0;
   for (const credit of importCredits(record)) {
+    // Тот же файл, залитый второй раз, не должен гасить покупки повторно.
+    if (await refundAlreadyApplied(record.ledgerId, credit.fingerprint)) continue;
+
     const currency = (credit.currency ?? base) as Currency;
     const target = await findRefundTarget(
       record.ledgerId,
@@ -251,10 +255,16 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
       currency,
       credit.spentAt,
       credit.description,
+      // В выписке приход — чаще пополнение карты, чем возврат, поэтому без
+      // совпадения по названию не гасим ничего.
+      { requireMerchant: true },
     );
     if (target === undefined) continue;
 
-    await applyRefund(target.id, credit.amount);
+    await applyRefund(target.id, credit.amount, {
+      importId: record.id,
+      fingerprint: credit.fingerprint,
+    });
     refunded++;
   }
 

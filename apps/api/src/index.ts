@@ -225,6 +225,8 @@ function serialize(
     // Сколько по этой покупке вернули: строка показывает это отдельно, а из
     // итогов сумма уже вычтена.
     refunded: Number(expense.refundedAmount),
+    /** Сколько эта трата весит в итогах: сумма за вычетом возврата. */
+    netBase: ((amount - Number(expense.refundedAmount)) * Number(expense.rateToUsd)) / rate,
     category: category === null ? null : { slug: category.slug, title: category.title, emoji: category.emoji },
   };
 }
@@ -473,7 +475,14 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   }
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.amount !== undefined) patch["amount"] = body.amount.toFixed(2);
+  if (body.amount !== undefined) {
+    patch["amount"] = body.amount.toFixed(2);
+    // Возврат не может быть больше самой покупки: иначе трата начнёт считаться
+    // отрицательной и потянет итоги вниз.
+    if (Number(expense.refundedAmount) > body.amount) {
+      patch["refundedAmount"] = body.amount.toFixed(2);
+    }
+  }
   if (body.merchant !== undefined) patch["merchant"] = body.merchant;
   if (body.note !== undefined) patch["note"] = body.note;
   if (body.payment !== undefined) patch["payment"] = body.payment;

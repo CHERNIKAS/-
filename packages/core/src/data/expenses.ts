@@ -92,7 +92,12 @@ export async function findRefundTarget(
   currency: Currency,
   spentAt: string,
   description = "",
+  options: { requireMerchant?: boolean } = {},
 ): Promise<Expense | undefined> {
+  // Пополнение счёта и обмен — это движение своих же денег, и совпадение с
+  // покупкой по сумме тут чистая случайность. Такие строки не гасят ничего.
+  if (looksLikeTransfer(description)) return undefined;
+
   const tolerance = refundTolerance(amount);
   const since = new Date(`${spentAt}T00:00:00Z`);
   since.setUTCDate(since.getUTCDate() - REFUND_WINDOW_DAYS);
@@ -116,10 +121,15 @@ export async function findRefundTarget(
   if (candidates.length === 0) return undefined;
 
   // Совпадение по названию решает спор: на одну и ту же сумму покупок бывает
-  // несколько, и без этого возврат из Amazon мог бы погасить поездку в
-  // автобусе. Само по себе название ненадёжно — в выписке у возврата оно
-  // часто другое, — но как выбор из уже подходящих по сумме работает точно.
+  // несколько, и без него возврат из Amazon гасил бы поездку в автобусе.
   const named = candidates.find((c) => sameMerchant(c.merchant ?? "", description));
+
+  // В выписке названия обязательны. Там приход — это чаще пополнение карты,
+  // чем возврат, и сумма сама по себе ничего не доказывает: пополнение на
+  // 19.95 «погасило» покупку на 19.27 просто потому, что числа рядом.
+  // Написанному руками «возврат 15 лир» верим и без названия: человек уже
+  // сказал, что это возврат.
+  if (options.requireMerchant === true) return named;
 
   return named ?? candidates[0];
 }
@@ -129,9 +139,25 @@ export async function findRefundTarget(
  *
  * Только проценты, без крупного порога в копейках: с порогом в полдоллара
  * возврат за проезд на цент подходил бы к любой мелкой покупке в книге.
+ * Пятнадцать — это разброс курса за неделю-другую между покупкой и возвратом:
+ * 3.04 уходит и 3.36 возвращается, и это тот же самый заказ.
  */
 function refundTolerance(amount: number): number {
-  return Math.max(0.02, amount * 0.1);
+  return Math.max(0.02, amount * 0.15);
+}
+
+/** Своё же движение денег: не трата, не доход и точно не возврат. */
+const TRANSFER_WORDS = [
+  "top up", "topup", "top-up", "deposit", "withdraw", "withdrawal", "transfer",
+  "exchange", "swap", "conversion", "cashback", "reward",
+  "пополнение", "пополнил", "перевод", "обмен", "вывод", "кэшбек", "кешбек",
+  "поповнення", "переказ", "обмін",
+  "yükleme", "yukleme", "havale", "transfer i̇şlemi",
+];
+
+function looksLikeTransfer(description: string): boolean {
+  const clean = description.toLowerCase().replace(/\s+/g, " ");
+  return TRANSFER_WORDS.some((word) => clean.includes(word));
 }
 
 /** Общее значимое слово в названиях: «MIGROS-154203» и «MIGROS ALANYA» — одно место. */
@@ -157,15 +183,36 @@ const REFUND_WINDOW_DAYS = 90;
  * Возвращённая сумма пишется в саму покупку, а не отдельной строкой: так она
  * вычитается из всех отчётов разом и не появляется в доходах.
  */
-export async function applyRefund(expenseId: number, amount: number): Promise<void> {
+export async function applyRefund(
+  expenseId: number,
+  amount: number,
+  origin: { importId?: number; fingerprint?: string } = {},
+): Promise<void> {
   await db
     .update(schema.expenses)
     .set({
       refundedAmount: sql`least(${schema.expenses.amount}, ${schema.expenses.refundedAmount} + ${amount.toFixed(2)})`,
       refundedAt: new Date(),
+      refundImportId: origin.importId ?? null,
+      refundFingerprint: origin.fingerprint ?? null,
       updatedAt: new Date(),
     })
     .where(eq(schema.expenses.id, expenseId));
+}
+
+/** Гасили ли уже покупку этой самой строкой возврата из выписки. */
+export async function refundAlreadyApplied(
+  ledgerId: number,
+  fingerprint: string,
+): Promise<boolean> {
+  const row = await db.query.expenses.findFirst({
+    where: and(
+      eq(schema.expenses.ledgerId, ledgerId),
+      eq(schema.expenses.refundFingerprint, fingerprint),
+    ),
+  });
+
+  return row !== undefined;
 }
 
 /** Сумма трат в долларах за период, от даты включительно. */

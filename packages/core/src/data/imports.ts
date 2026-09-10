@@ -108,6 +108,19 @@ export async function undoImport(id: number): Promise<number> {
     .where(and(eq(schema.expenses.importId, id), isNull(schema.expenses.deletedAt)))
     .returning({ id: schema.expenses.id });
 
+  // Возвраты из этого файла гасили покупки, которых импорт не создавал —
+  // значит откат должен вернуть и их, иначе старые траты навсегда останутся
+  // наполовину погашенными, и никто уже не поймёт почему.
+  await db
+    .update(schema.expenses)
+    .set({
+      refundedAmount: "0",
+      refundedAt: null,
+      refundImportId: null,
+      refundFingerprint: null,
+    })
+    .where(eq(schema.expenses.refundImportId, id));
+
   await cancelImport(id);
   return affected.length;
 }

@@ -85,6 +85,9 @@ export async function createCategoryFromSuggestion(
     .where(
       and(
         eq(schema.expenses.ledgerId, ledgerId),
+        // Доход с тем же названием категорию получать не должен: категории
+        // описывают, куда деньги ушли.
+        eq(schema.expenses.kind, "expense"),
         sql`lower(${schema.expenses.merchant}) = ${merchant.toLowerCase()}`,
         isNull(schema.expenses.deletedAt),
       ),

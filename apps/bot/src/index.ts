@@ -19,6 +19,7 @@ import {
   ensureUser,
   joinLedger,
   ledgerByToken,
+  importById,
   ledgersOf,
   membersOf,
   undoImport,
@@ -219,6 +220,14 @@ bot.on("callback_query:data", async (ctx) => {
   if (data.startsWith("i:")) {
     const [, action, rawId] = data.split(":");
     const importId = Number(rawId);
+
+    // Кнопки видны только своему импорту, но данные кнопки подделываются —
+    // проверяем хозяина, а не доверяем нажатию.
+    const record = await importById(importId);
+    if (!record || record.userId !== user.id) {
+      await ctx.answerCallbackQuery("Этот импорт уже неактуален");
+      return;
+    }
 
     if (action === "apply") {
       await applyImport(ctx, user, importId);

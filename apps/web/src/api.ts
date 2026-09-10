@@ -41,6 +41,8 @@ export type Expense = {
   incomeSource: string | null;
   /** Сколько по этой покупке вернули: из итогов сумма уже вычтена. */
   refunded: number;
+  /** Вес траты в итогах: сумма за вычетом возврата, в валюте отображения. */
+  netBase: number;
 };
 
 export type State = {
