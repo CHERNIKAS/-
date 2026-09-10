@@ -16,11 +16,13 @@ import { notify, tap } from "../telegram.js";
  */
 export function Add({
   categories,
+  incomeSources,
   currency: defaultCurrency,
   onDone,
   onClose,
 }: {
   categories: Category[];
+  incomeSources: string[];
   currency: string;
   onDone: () => void;
   onClose: () => void;
@@ -40,7 +42,7 @@ export function Add({
    * когда приходят — это то же самое действие, только в другую сторону.
    */
   const [kind, setKind] = useState<"expense" | "income">("expense");
-  const [source, setSource] = useState<string>(INCOME_SOURCES[0]);
+  const [source, setSource] = useState<string>(incomeSources[0] ?? "Поступления");
   const [done, setDone] = useState<string | null>(null);
   useBodyLock(true);
   const drag = useSheetDrag(onClose);
@@ -48,7 +50,7 @@ export function Add({
 
   const amount = Number(digits.replace(",", ".")) || 0;
   const canSave = mode === "text" ? text.trim() !== "" : amount > 0;
-  const placeholder = kind === "income" ? "зарплата 2500" : "магаз 15 лир";
+  const placeholder = kind === "income" ? "поступление 2500" : "магаз 15 лир";
 
   async function save() {
     if (!canSave || busy) return;
@@ -163,7 +165,7 @@ export function Add({
 
         {kind === "income" && (
           <div className="chips" style={{ marginBottom: 14 }}>
-            {INCOME_SOURCES.map((title) => (
+            {incomeSources.map((title) => (
               <button
                 key={title}
                 className={title === source ? "pill on" : "pill ghost"}
@@ -274,9 +276,6 @@ export function Add({
 }
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
-
-/** Короткий список: длинный превращает быстрый ввод в выбор из меню. */
-const INCOME_SOURCES = ["Зарплата", "Фриланс", "Подарок", "Продажа", "Прочее"] as const;
 
 function nextDigits(current: string, key: string): string {
   if (key === "⌫") return current.slice(0, -1);

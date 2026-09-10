@@ -102,7 +102,7 @@ it("плюс впереди делает строку доходом", () => {
   it("зарплата узнаётся по слову, без плюса", () => {
     const r = parseEntry("зарплата 2500");
     expect(r.kind).toBe("income");
-    expect(r.incomeSource).toBe("Зарплата");
+    expect(r.incomeSource).toBe("Поступления");
   });
 
   it("возврат — не доход, а отмена покупки", () => {

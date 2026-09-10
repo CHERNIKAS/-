@@ -80,3 +80,15 @@ export const CATEGORY_SEED: CategorySeed[] = [
 export const FALLBACK_CATEGORY_SLUG = "other";
 
 export const MAX_CATEGORIES = 50;
+
+/**
+ * Источники дохода по умолчанию.
+ *
+ * Коротко и нейтрально: доход у всех устроен по-своему, а длинный список
+ * чужих названий — это выбор из меню вместо быстрого ввода. Свои добавляются
+ * в настройках.
+ */
+export const DEFAULT_INCOME_SOURCES = ["Поступления", "Прочее"];
+
+/** Больше дюжины подсказок — это уже не подсказки. */
+export const MAX_INCOME_SOURCES = 12;

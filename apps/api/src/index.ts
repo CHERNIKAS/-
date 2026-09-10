@@ -5,8 +5,10 @@ import {
   categorize,
   classify,
   parseMessage,
+  DEFAULT_INCOME_SOURCES,
   FALLBACK_CATEGORY_SLUG,
   guessIcon,
+  MAX_INCOME_SOURCES,
   MAX_CATEGORIES,
   buildPeriod,
   PERIOD_KEYS,
@@ -150,6 +152,20 @@ async function buildCard(
   };
 }
 
+/** Свои источники или список по умолчанию — приложению нужен непустой. */
+function incomeSourcesOf(user: { incomeSources: string | null }): string[] {
+  if (user.incomeSources === null) return DEFAULT_INCOME_SOURCES;
+
+  try {
+    const parsed = JSON.parse(user.incomeSources) as unknown;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(String);
+  } catch {
+    // Испорченный JSON — не повод ломать экран: покажем список по умолчанию.
+  }
+
+  return DEFAULT_INCOME_SOURCES;
+}
+
 app.get("/api/state", async (request) => {
   const { user, ledgerId } = request;
   const todayDay = today();
@@ -187,6 +203,7 @@ app.get("/api/state", async (request) => {
       dailyCleanup: user.dailyCleanup,
       monthlyDigest: user.monthlyDigest,
       monthlyBudget: user.monthlyBudget === null ? null : Number(user.monthlyBudget),
+      incomeSources: incomeSourcesOf(user),
       firstName: user.firstName,
     },
     today: todayDay,
@@ -639,6 +656,7 @@ const settingsSchema = z.object({
   dailyCleanup: z.boolean().optional(),
   monthlyDigest: z.boolean().optional(),
   monthlyBudget: z.number().nonnegative().nullable().optional(),
+  incomeSources: z.array(z.string().min(1).max(32)).max(MAX_INCOME_SOURCES).optional(),
 });
 
 app.patch("/api/settings", async (request) => {
@@ -647,6 +665,13 @@ app.patch("/api/settings", async (request) => {
 
   if (body.monthlyBudget !== undefined) {
     patch["monthlyBudget"] = body.monthlyBudget === null ? null : body.monthlyBudget.toFixed(2);
+  }
+
+  // Пустой список означает «верни как было»: остаться совсем без подсказок
+  // при вводе дохода — не то, чего человек хочет, нажимая крестики.
+  if (body.incomeSources !== undefined) {
+    const clean = [...new Set(body.incomeSources.map((t) => t.trim()).filter((t) => t !== ""))];
+    patch["incomeSources"] = clean.length === 0 ? null : JSON.stringify(clean);
   }
 
   await updateUser(request.user.id, patch as Partial<AppUser>);

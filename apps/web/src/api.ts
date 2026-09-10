@@ -55,6 +55,8 @@ export type State = {
     monthlyDigest: boolean;
     monthlyBudget: number | null;
     firstName: string | null;
+    /** Подсказки при вводе дохода: свои или список по умолчанию. */
+    incomeSources: string[];
   };
   today: string;
   sharedActive: boolean;

@@ -174,7 +174,11 @@ export function App() {
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
           {more === "categories" && (
-            <Categories currency={state.user.currency} onChanged={() => void reload()} />
+            <Categories
+              currency={state.user.currency}
+              incomeSources={state.user.incomeSources}
+              onChanged={() => void reload()}
+            />
           )}
           {more === "recurring" && (
             <Recurring
@@ -297,6 +301,7 @@ export function App() {
       {adding && (
         <Add
           categories={state.categories}
+          incomeSources={state.user.incomeSources}
           currency={state.user.currency}
           onClose={() => setAdding(false)}
           onDone={() => {
@@ -325,6 +330,7 @@ export function App() {
         <ExpenseSheet
           expense={editing}
           categories={state.categories}
+          incomeSources={state.user.incomeSources}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);

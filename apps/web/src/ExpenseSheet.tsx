@@ -11,9 +11,6 @@ import { useBodyLock } from "./useBodyLock.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 
-/** Тот же короткий список, что и в добавлении: длинный превращается в меню. */
-const INCOME_SOURCES = ["Зарплата", "Фриланс", "Подарок", "Продажа", "Прочее"] as const;
-
 const PAYMENTS = [
   { key: "card", title: "Карта" },
   { key: "cash", title: "Наличные" },
@@ -30,11 +27,13 @@ const PAYMENTS = [
 export function ExpenseSheet({
   expense,
   categories,
+  incomeSources,
   onSaved,
   onClose,
 }: {
   expense: Expense;
   categories: Category[];
+  incomeSources: string[];
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -216,7 +215,9 @@ export function ExpenseSheet({
         </p>
         {isIncome ? (
           <div className="chips" style={{ marginBottom: 15 }}>
-            {INCOME_SOURCES.map((title) => (
+            {/* Источник, которого нет в списке, тоже показываем: он пришёл из
+                чата или остался от старой настройки, и молча терять его нельзя. */}
+            {(incomeSources.includes(source) ? incomeSources : [source, ...incomeSources]).map((title) => (
               <button
                 key={title}
                 className={title === source ? "pill on" : "pill ghost"}

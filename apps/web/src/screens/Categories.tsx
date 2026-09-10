@@ -15,7 +15,15 @@ type Rule = { id: number; pattern: string; hits: number; title: string; slug: st
  * с нулём — первые кандидаты на слияние. Слияние ничего не удаляет, траты и
  * правила переезжают, а исходная уходит в архив.
  */
-export function Categories({ currency, onChanged }: { currency: string; onChanged: () => void }) {
+export function Categories({
+  currency,
+  incomeSources,
+  onChanged,
+}: {
+  currency: string;
+  incomeSources: string[];
+  onChanged: () => void;
+}) {
   const [rows, setRows] = useState<Row[]>([]);
   const [limit, setLimit] = useState(50);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -32,6 +40,7 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
    */
   const [fresh, setFresh] = useState("");
   const [added, setAdded] = useState<string[]>([]);
+  const [freshSource, setFreshSource] = useState("");
 
   async function load() {
     const [cats, rls] = await Promise.all([api.categories(), api.rules()]);
@@ -55,6 +64,25 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
       setFresh("");
       setAdded((list) => [title, ...list].slice(0, 4));
       await load();
+      onChanged();
+    } catch (e) {
+      notify("error");
+      alertError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Источники дохода живут отдельно от категорий: категории отвечают, куда
+   * деньги ушли, источники — откуда пришли, и мешать их в одном списке значит
+   * получить «Зарплату» в кольце расходов.
+   */
+  async function saveSources(next: string[]) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.settings({ incomeSources: next });
       onChanged();
     } catch (e) {
       notify("error");
@@ -165,9 +193,65 @@ export function Categories({ currency, onChanged }: { currency: string; onChange
         })}
       </div>
 
+      <p className="label" style={{ margin: "22px 2px 10px" }}>
+        Источники дохода
+      </p>
+
+      <div className="chips" style={{ marginBottom: 12 }}>
+        {incomeSources.map((title) => (
+          <button
+            key={title}
+            className="pill"
+            onClick={() => {
+              tap();
+              void saveSources(incomeSources.filter((t) => t !== title));
+            }}
+          >
+            {title}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        ))}
+      </div>
+
+      <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+        <input
+          className="field grow"
+          placeholder="Например, Аренда"
+          value={freshSource}
+          maxLength={32}
+          onChange={(e) => setFreshSource(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            const title = freshSource.trim();
+            if (title === "") return;
+            setFreshSource("");
+            void saveSources([...incomeSources, title]);
+          }}
+        />
+        <button
+          className="pill on"
+          style={{ padding: "14px 18px" }}
+          disabled={freshSource.trim() === "" || busy}
+          onClick={() => {
+            const title = freshSource.trim();
+            if (title === "") return;
+            setFreshSource("");
+            void saveSources([...incomeSources, title]);
+          }}
+        >
+          Добавить
+        </button>
+      </div>
+
+      <p className="dim" style={{ margin: "8px 2px 0" }}>
+        Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
+      </p>
+
       <button
         className="cta"
-        style={{ marginTop: 16, background: "rgba(255,255,255,.12)", color: "var(--ink)" }}
+        style={{ marginTop: 22, background: "rgba(255,255,255,.12)", color: "var(--ink)" }}
         onClick={() => {
           tap();
           setShowRules((open) => !open);
