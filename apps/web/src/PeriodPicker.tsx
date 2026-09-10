@@ -39,7 +39,7 @@ export function PeriodPicker({
 
   return (
     <>
-      <div className="scroller">
+      <div className="scroller equal">
         {PERIODS.filter((p) => p.key !== "custom").map((period) => (
           <button
             key={period.key}

@@ -431,6 +431,20 @@ svg {
   display: none;
 }
 
+/* Периодов ровно пять — они делят строку поровну и прокрутка не нужна.
+   Ряд из кнопок разной ширины с зазором справа выглядел незакончённым. */
+.scroller.equal {
+  gap: 6px;
+  overflow: visible;
+}
+
+.scroller.equal > button {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 12.5px;
+}
+
 /* Выбор из двух — один блок, а не две отдельные команды. */
 .seg {
   display: flex;
