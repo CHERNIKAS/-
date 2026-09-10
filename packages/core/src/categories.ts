@@ -90,5 +90,5 @@ export const MAX_CATEGORIES = 50;
  */
 export const DEFAULT_INCOME_SOURCES = ["Поступления", "Прочее"];
 
-/** Больше дюжины подсказок — это уже не подсказки. */
-export const MAX_INCOME_SOURCES = 12;
+/** Полтора десятка — потолок, за которым список перестаёт читаться. */
+export const MAX_INCOME_SOURCES = 15;

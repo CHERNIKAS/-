@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { money } from "../format.js";
-import { guessIcon, PALETTE } from "@costnote/core";
+import { guessIcon, MAX_INCOME_SOURCES, PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
 import { notify, tap } from "../telegram.js";
@@ -155,7 +155,7 @@ export function Categories({
       <div className="between" style={{ padding: "0 2px 12px" }}>
         <p className="label">{side === "expense" ? "Категории" : "Источники дохода"}</p>
         <span className="dim">
-          {side === "expense" ? `${rows.length} из ${limit}` : `${incomeSources.length} из 12`}
+          {side === "expense" ? `${rows.length} из ${limit}` : `${incomeSources.length} из ${MAX_INCOME_SOURCES}`}
         </span>
       </div>
 
@@ -254,10 +254,6 @@ export function Categories({
             Завести
           </button>
         </div>
-
-        <p className="dim" style={{ margin: "0 2px 14px" }}>
-          Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
-        </p>
 
         {/* Такие же карточки, как у категорий: источник — это тоже строка со
             своим значком, и выглядеть по-другому ей не за что. */}
