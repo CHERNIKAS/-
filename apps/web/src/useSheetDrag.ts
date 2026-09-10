@@ -122,20 +122,37 @@ export function useSheetDrag(onClose: () => void) {
      */
     let restore = 0;
 
+    function pin(ms: number) {
+      const until = Date.now() + ms;
+      clearInterval(restore);
+
+      restore = window.setInterval(() => {
+        if (node === null) return;
+
+        node.scrollTop = 0;
+        // Систему уносит и саму страницу под шторкой — её тоже возвращаем.
+        window.scrollTo(0, 0);
+
+        if (Date.now() > until) clearInterval(restore);
+      }, 16);
+    }
+
+    // Поле в шторке добавления получает фокус само, ещё до того как этот
+    // обработчик успевает повеситься, — поэтому держим прокрутку с самого
+    // открытия, а не только по фокусу.
+    pin(900);
+
     function onFocus(event: FocusEvent) {
       if (node === null) return;
 
       const target = event.target as HTMLElement | null;
       if (target === null) return;
+
+      // Поле в самом низу длинной карточки система поднимает правильно, и
+      // мешать ей там не надо.
       if (target.offsetTop > node.clientHeight * 0.45) return;
 
-      const until = Date.now() + 500;
-      clearInterval(restore);
-      restore = window.setInterval(() => {
-        if (node === null) return;
-        node.scrollTop = 0;
-        if (Date.now() > until) clearInterval(restore);
-      }, 16);
+      pin(700);
     }
 
     node.addEventListener("touchstart", onStart, { passive: true });
@@ -144,12 +161,19 @@ export function useSheetDrag(onClose: () => void) {
     node.addEventListener("touchcancel", onEnd);
     node.addEventListener("focusin", onFocus);
 
+    // Появление клавиатуры — тот же случай: система пересчитывает видимую
+    // область и заодно прокручивает всё, до чего дотянется.
+    const viewport = window.visualViewport;
+    const onViewport = () => pin(500);
+    viewport?.addEventListener("resize", onViewport);
+
     return () => {
       node.removeEventListener("touchstart", onStart);
       node.removeEventListener("touchmove", onMove);
       node.removeEventListener("touchend", onEnd);
       node.removeEventListener("touchcancel", onEnd);
       node.removeEventListener("focusin", onFocus);
+      viewport?.removeEventListener("resize", onViewport);
       clearInterval(restore);
       if (frame !== 0) cancelAnimationFrame(frame);
     };
