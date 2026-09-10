@@ -225,6 +225,40 @@ export function Categories({
 
       {side === "income" && (
         <>
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <input
+            className="field grow"
+            placeholder="Например, Аренда"
+            value={freshSource}
+            maxLength={32}
+            onChange={(e) => setFreshSource(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const title = freshSource.trim();
+              if (title === "") return;
+              setFreshSource("");
+              void saveSources([...incomeSources, title]);
+            }}
+          />
+          <button
+            className="pill on"
+            style={{ padding: "14px 18px" }}
+            disabled={freshSource.trim() === "" || busy}
+            onClick={() => {
+              const title = freshSource.trim();
+              if (title === "") return;
+              setFreshSource("");
+              void saveSources([...incomeSources, title]);
+            }}
+          >
+            Завести
+          </button>
+        </div>
+
+        <p className="dim" style={{ margin: "0 2px 14px" }}>
+          Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
+        </p>
+
         {/* Такие же карточки, как у категорий: источник — это тоже строка со
             своим значком, и выглядеть по-другому ей не за что. */}
         <div className="card rows" style={{ padding: "2px 16px", marginBottom: 14 }}>
@@ -267,39 +301,6 @@ export function Categories({
           })}
         </div>
 
-        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-          <input
-            className="field grow"
-            placeholder="Например, Аренда"
-            value={freshSource}
-            maxLength={32}
-            onChange={(e) => setFreshSource(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              const title = freshSource.trim();
-              if (title === "") return;
-              setFreshSource("");
-              void saveSources([...incomeSources, title]);
-            }}
-          />
-          <button
-            className="pill on"
-            style={{ padding: "14px 18px" }}
-            disabled={freshSource.trim() === "" || busy}
-            onClick={() => {
-              const title = freshSource.trim();
-              if (title === "") return;
-              setFreshSource("");
-              void saveSources([...incomeSources, title]);
-            }}
-          >
-            Добавить
-          </button>
-        </div>
-
-        <p className="dim" style={{ margin: "8px 2px 0" }}>
-          Это подсказки при вводе дохода. Уберёшь все — вернутся стандартные.
-        </p>
         </>
       )}
 
