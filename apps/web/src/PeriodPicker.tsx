@@ -1,22 +1,25 @@
-import { useState } from "react";
-import { PERIODS, type PeriodKey, type Range, rangeFor } from "./periods.js";
+import { type ReactNode, useState } from "react";
+import { PERIODS, type PeriodKey, type Range, rangeFor, rangeTitle } from "./periods.js";
 import { tap } from "./telegram.js";
 
 /**
  * Выбор периода.
  *
- * Один и тот же на разборе и в истории. «Свой» открывает шторку с двумя
- * датами — без неё набор пресетов рано или поздно упирается в вопрос
- * «а посмотреть с 3 по 17 число?».
+ * Пресеты — одной прокручиваемой строкой: перенос на три строки съедал пол-экрана
+ * и заставлял скроллить разбор. Произвольный диапазон уехал отдельной ссылкой —
+ * им пользуются редко, а места в общем ряду он занимал столько же.
  */
 export function PeriodPicker({
   today,
   range,
   onChange,
+  extra,
 }: {
   today: string;
   range: Range;
   onChange: (range: Range) => void;
+  /** Например, переключатель «Категории / Валюты» — встаёт в одну строку со ссылкой. */
+  extra?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [from, setFrom] = useState(range.from);
@@ -35,8 +38,8 @@ export function PeriodPicker({
 
   return (
     <>
-      <div className="chips">
-        {PERIODS.map((period) => (
+      <div className="scroller">
+        {PERIODS.filter((p) => p.key !== "custom").map((period) => (
           <button
             key={period.key}
             className={period.key === range.key ? "pill on" : "pill ghost"}
@@ -45,6 +48,16 @@ export function PeriodPicker({
             {period.title}
           </button>
         ))}
+      </div>
+
+      <div className="between" style={{ marginTop: 10 }}>
+        {extra ?? <span />}
+        <button
+          className={range.key === "custom" ? "pill on" : "linky"}
+          onClick={() => choose("custom")}
+        >
+          {range.key === "custom" ? rangeTitle(range) : "Свой период"}
+        </button>
       </div>
 
       {editing && (

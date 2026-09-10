@@ -101,7 +101,7 @@ export function History({
 
       <PeriodPicker today={today} range={range} onChange={setRange} />
 
-      <div className="between" style={{ margin: "16px 2px 12px" }}>
+      <div className="between" style={{ margin: "14px 2px 12px" }}>
         <span className="label">{rangeTitle(range)}</span>
         <span className="num muted">{money(total, currency)}</span>
       </div>

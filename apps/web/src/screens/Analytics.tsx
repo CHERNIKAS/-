@@ -60,32 +60,37 @@ export function Analytics({ currency, today }: { currency: string; today: string
 
   return (
     <>
-      <div style={{ padding: "12px 0 14px" }}>
-        <PeriodPicker today={today} range={range} onChange={setRange} />
+      <div style={{ padding: "12px 0 18px" }}>
+        <PeriodPicker
+          today={today}
+          range={range}
+          onChange={setRange}
+          extra={
+            currencies.length > 1 ? (
+              <span className="seg">
+                <button
+                  className={mode === "categories" ? "on" : ""}
+                  onClick={() => {
+                    tap();
+                    setMode("categories");
+                  }}
+                >
+                  Категории
+                </button>
+                <button
+                  className={mode === "currencies" ? "on" : ""}
+                  onClick={() => {
+                    tap();
+                    setMode("currencies");
+                  }}
+                >
+                  Валюты
+                </button>
+              </span>
+            ) : undefined
+          }
+        />
       </div>
-
-      {currencies.length > 1 && (
-        <div className="chips" style={{ marginBottom: 20 }}>
-          <button
-            className={mode === "categories" ? "pill on" : "pill ghost"}
-            onClick={() => {
-              tap();
-              setMode("categories");
-            }}
-          >
-            Категории
-          </button>
-          <button
-            className={mode === "currencies" ? "pill on" : "pill ghost"}
-            onClick={() => {
-              tap();
-              setMode("currencies");
-            }}
-          >
-            Валюты
-          </button>
-        </div>
-      )}
 
       {error !== null && <div className="err">{error}</div>}
       {data === null && error === null && <p className="spinner">Считаю…</p>}
@@ -99,7 +104,7 @@ export function Analytics({ currency, today }: { currency: string; today: string
       {data !== null && categories.length > 0 && (
         <>
           <div
-            style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}
+            style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}
             dangerouslySetInnerHTML={{
               __html: donutSvg(
                 slices.map((s, i) => ({
@@ -112,7 +117,7 @@ export function Analytics({ currency, today }: { currency: string; today: string
                   caption: rangeTitle(range),
                   legendRows: 0,
                   background: "none",
-                  size: 300,
+                  size: 200,
                 },
               ),
             }}
@@ -129,19 +134,14 @@ export function Analytics({ currency, today }: { currency: string; today: string
                   const share = total === 0 ? 0 : c.total / total;
 
                   return (
-                    <div key={c.slug} className="item">
+                    <div key={c.slug} className="item dense">
                       <span
                         className="tile"
                         style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
                       >
                         <CategoryIcon slug={c.slug} />
                       </span>
-                      <span className="grow">
-                        <span className="title">{c.title}</span>
-                        <span className="bar" style={{ marginTop: 7 }}>
-                          <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
-                        </span>
-                      </span>
+                      <span className="grow title">{c.title}</span>
                       <span className="amount">
                         {money(c.total, data.currency)}
                         <span className="sub">{Math.round(share * 100)}%</span>
@@ -154,19 +154,14 @@ export function Analytics({ currency, today }: { currency: string; today: string
                   const share = total === 0 ? 0 : c.base / total;
 
                   return (
-                    <div key={c.currency} className="item">
+                    <div key={c.currency} className="item dense">
                       <span
                         className="tile"
                         style={{ background: tint(color), color, borderColor: tint(color, 0.24) }}
                       >
                         {CURRENCY_SIGN[c.currency] ?? c.currency}
                       </span>
-                      <span className="grow">
-                        <span className="title">{CURRENCY_NAME[c.currency] ?? c.currency}</span>
-                        <span className="bar" style={{ marginTop: 7 }}>
-                          <i style={{ width: `${Math.round(share * 100)}%`, background: color }} />
-                        </span>
-                      </span>
+                      <span className="grow title">{CURRENCY_NAME[c.currency] ?? c.currency}</span>
                       <span className="amount">
                         {moneyExact(c.amount, c.currency)}
                         <span className="sub">

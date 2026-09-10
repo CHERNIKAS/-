@@ -414,3 +414,51 @@ svg {
   background: #2e1e5e;
   border: 1px solid var(--edge-2);
 }
+
+/* Периоды в одну строку с прокруткой: перенос на три строки съедал экран,
+   а край выглядывающей кнопки сам подсказывает, что список листается. */
+.scroller {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* Выбор из двух — один блок, а не две отдельные команды. */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--edge);
+}
+
+.seg button {
+  padding: 7px 15px;
+  border-radius: 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.seg button.on {
+  background: var(--mint);
+  color: #10233a;
+  font-weight: 600;
+}
+
+.linky {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding: 6px 2px;
+}
+
+/* Плотная строка списка: доли уже видно на кольце. */
+.item.dense {
+  padding: 9px 0;
+}
