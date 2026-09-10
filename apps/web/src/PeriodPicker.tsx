@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { IconCalendar } from "./icons.js";
 import { PERIODS, type PeriodKey, type Range, rangeFor, rangeTitle } from "./periods.js";
 import { tap } from "./telegram.js";
 
@@ -53,9 +54,10 @@ export function PeriodPicker({
       <div className="between" style={{ marginTop: 10 }}>
         {extra ?? <span />}
         <button
-          className={range.key === "custom" ? "pill on" : "linky"}
+          className={range.key === "custom" ? "pill on" : "pill ghost"}
           onClick={() => choose("custom")}
         >
+          <IconCalendar />
           {range.key === "custom" ? rangeTitle(range) : "Свой период"}
         </button>
       </div>

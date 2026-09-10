@@ -79,6 +79,13 @@ export const IconText = ({ size = 20 }: Props) => (
   </svg>
 );
 
+export const IconCalendar = ({ size = 16 }: Props) => (
+  <svg {...base(size)}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
+    <path d="M3.5 9.5h17M8 3v3.4M16 3v3.4" />
+  </svg>
+);
+
 const CART = (
   <>
     <path d="M3 4h2.2l2.3 10.4h9.4L19 7H6" />
