@@ -245,7 +245,13 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   let refunded = 0;
   for (const credit of importCredits(record)) {
     const currency = (credit.currency ?? base) as Currency;
-    const target = await findRefundTarget(record.ledgerId, credit.amount, currency, credit.spentAt);
+    const target = await findRefundTarget(
+      record.ledgerId,
+      credit.amount,
+      currency,
+      credit.spentAt,
+      credit.description,
+    );
     if (target === undefined) continue;
 
     await applyRefund(target.id, credit.amount);

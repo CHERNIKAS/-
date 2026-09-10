@@ -334,7 +334,13 @@ app.post("/api/expenses", async (request, reply) => {
     // Возврат и доход разбираются так же, как в чате: правила одни, иначе одна
     // и та же строка значила бы в двух местах разное.
     if (draft.isRefund) {
-      const target = await findRefundTarget(ledgerId, draft.amount, draft.currency, draft.spentAt);
+      const target = await findRefundTarget(
+        ledgerId,
+        draft.amount,
+        draft.currency,
+        draft.spentAt,
+        draft.merchant,
+      );
       if (target !== undefined) {
         await applyRefund(target.id, draft.amount);
         refunded++;

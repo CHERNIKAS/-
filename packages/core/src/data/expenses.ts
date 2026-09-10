@@ -91,13 +91,13 @@ export async function findRefundTarget(
   amount: number,
   currency: Currency,
   spentAt: string,
+  description = "",
 ): Promise<Expense | undefined> {
-  // Допуск: копейки округления на мелких суммах, проценты — на крупных.
-  const tolerance = Math.max(0.5, amount * 0.05);
+  const tolerance = refundTolerance(amount);
   const since = new Date(`${spentAt}T00:00:00Z`);
   since.setUTCDate(since.getUTCDate() - REFUND_WINDOW_DAYS);
 
-  return db.query.expenses.findFirst({
+  const candidates = await db.query.expenses.findMany({
     where: and(
       eq(schema.expenses.ledgerId, ledgerId),
       eq(schema.expenses.kind, "expense"),
@@ -110,7 +110,42 @@ export async function findRefundTarget(
       lte(schema.expenses.amount, (amount + tolerance).toFixed(2)),
     ),
     orderBy: desc(schema.expenses.spentAt),
+    limit: 20,
   });
+
+  if (candidates.length === 0) return undefined;
+
+  // Совпадение по названию решает спор: на одну и ту же сумму покупок бывает
+  // несколько, и без этого возврат из Amazon мог бы погасить поездку в
+  // автобусе. Само по себе название ненадёжно — в выписке у возврата оно
+  // часто другое, — но как выбор из уже подходящих по сумме работает точно.
+  const named = candidates.find((c) => sameMerchant(c.merchant ?? "", description));
+
+  return named ?? candidates[0];
+}
+
+/**
+ * Допуск при сверке возврата с покупкой.
+ *
+ * Только проценты, без крупного порога в копейках: с порогом в полдоллара
+ * возврат за проезд на цент подходил бы к любой мелкой покупке в книге.
+ */
+function refundTolerance(amount: number): number {
+  return Math.max(0.02, amount * 0.1);
+}
+
+/** Общее значимое слово в названиях: «MIGROS-154203» и «MIGROS ALANYA» — одно место. */
+function sameMerchant(left: string, right: string): boolean {
+  const words = (text: string): string[] =>
+    text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length >= 4);
+
+  const first = new Set(words(left));
+  if (first.size === 0) return false;
+
+  return words(right).some((w) => first.has(w));
 }
 
 /** Сколько назад смотреть: за три месяца возвращают почти всё, что вернут. */

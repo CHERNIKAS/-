@@ -98,7 +98,7 @@ export async function saveExpenses(
     // Возврат ищет свою покупку по сумме: названия у них обычно разные, а
     // сумма — то, что их связывает. Нашлась — гасим её и ничего не создаём.
     if (entry.isRefund) {
-      const target = await findRefundTarget(ledgerId, amount, currency, spentAt);
+      const target = await findRefundTarget(ledgerId, amount, currency, spentAt, entry.merchant);
 
       if (target !== undefined) {
         await applyRefund(target.id, amount);
