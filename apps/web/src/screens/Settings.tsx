@@ -4,6 +4,43 @@ import { tap } from "../telegram.js";
 
 const CURRENCIES = ["USD", "EUR", "UAH", "TRY"] as const;
 
+/**
+ * Пояса под рукой — те, где человек с таким набором валют скорее всего и
+ * живёт. Полный список из четырёхсот строк здесь был бы издевательством, а
+ * свой пояс телефон и так знает.
+ */
+const ZONES = [
+  "Europe/Istanbul",
+  "Europe/Kyiv",
+  "Europe/Warsaw",
+  "Europe/Lisbon",
+  "Europe/Berlin",
+  "Asia/Tbilisi",
+  "Asia/Dubai",
+  "Asia/Bangkok",
+];
+
+function localTime(zone: string): string {
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: zone,
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date());
+  } catch {
+    return "—";
+  }
+}
+
+/** Что говорит сам телефон: попасть пальцем в свой пояс из списка — лотерея. */
+function deviceZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Короткий список: только то, что действительно переключают. */
 export function Settings({ state, onChanged }: { state: State; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -13,6 +50,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
   );
   const [budgetOn, setBudgetOn] = useState(state.user.monthlyBudget !== null);
   const user = state.user;
+  const detected = deviceZone();
 
   function saveBudget() {
     const value = Number(budget.replace(",", "."));
@@ -189,9 +227,33 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         {exported ?? "Файл придёт сообщением от бота — скачать напрямую из мини-аппа Telegram не даёт."}
       </p>
 
-      <p className="dim" style={{ margin: "24px 2px 8px" }}>
-        Часовой пояс: {user.timezone}
+      {/* Пояс решает, когда у тебя «сегодня» и в котором часу придёт
+          напоминание. Раньше он показывался, но менять его было негде. */}
+      <p className="label" style={{ margin: "24px 2px 10px" }}>
+        Часовой пояс
       </p>
+
+      <div className="card" style={{ padding: "4px 16px" }}>
+        <div className="item">
+          <span className="grow">
+            <span className="title">{user.timezone}</span>
+            <span className="sub">сейчас {localTime(user.timezone)}</span>
+          </span>
+          {detected !== null && detected !== user.timezone && (
+            <button className="pill on" onClick={() => void patch({ timezone: detected })}>
+              Взять с телефона
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="chips" style={{ marginTop: 10 }}>
+        {ZONES.filter((zone) => zone !== user.timezone).map((zone) => (
+          <button key={zone} className="pill ghost" onClick={() => void patch({ timezone: zone })}>
+            {zone.split("/")[1]?.replace("_", " ") ?? zone}
+          </button>
+        ))}
+      </div>
     </>
   );
 }

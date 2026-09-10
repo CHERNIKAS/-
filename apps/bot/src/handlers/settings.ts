@@ -14,6 +14,28 @@ export const SETTINGS_PREFIX = "s:";
 
 const on = (value: boolean) => (value ? "включено" : "выключено");
 
+/**
+ * Пояса перебором.
+ *
+ * От пояса зависят «сегодня» и час напоминания, а список — те места, где
+ * человек с этим набором валют скорее всего и живёт. Нужного нет — он есть в
+ * мини-аппе, там пояс можно взять прямо с телефона.
+ */
+const ZONES = [
+  "Europe/Istanbul",
+  "Europe/Kyiv",
+  "Europe/Warsaw",
+  "Europe/Lisbon",
+  "Europe/Berlin",
+  "Asia/Tbilisi",
+  "Asia/Dubai",
+  "Asia/Bangkok",
+];
+
+function shortZone(zone: string): string {
+  return zone.split("/")[1]?.replace("_", " ") ?? zone;
+}
+
 export function settingsText(user: AppUser): string {
   const lines = [
     "<b>Настройки</b>",
@@ -45,6 +67,8 @@ export function settingsKeyboard(user: AppUser): InlineKeyboard {
     .text("−1 час", `${SETTINGS_PREFIX}hour:-1`)
     .text(`${String(user.reminderHour).padStart(2, "0")}:00`, `${SETTINGS_PREFIX}noop`)
     .text("+1 час", `${SETTINGS_PREFIX}hour:1`)
+    .row()
+    .text(`Пояс: ${shortZone(user.timezone)}`, `${SETTINGS_PREFIX}tz`)
     .row()
     .text(user.dailyCleanup ? "Уборка чата: вкл" : "Уборка чата: выкл", `${SETTINGS_PREFIX}clean`)
     .row()
@@ -81,6 +105,14 @@ export async function handleSettingsCallback(ctx: Context, user: AppUser): Promi
     case "hour": {
       const delta = Number(arg ?? 0);
       patch.reminderHour = (user.reminderHour + delta + 24) % 24;
+      break;
+    }
+
+    case "tz": {
+      // Перебором по кругу, как валюта: список короткий, а вводить название
+      // пояса руками в чате — худшее, что можно предложить.
+      const index = ZONES.indexOf(user.timezone);
+      patch.timezone = ZONES[(index + 1) % ZONES.length] as string;
       break;
     }
 

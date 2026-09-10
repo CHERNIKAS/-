@@ -660,9 +660,20 @@ const settingsSchema = z.object({
   incomeSources: z.array(z.string().min(1).max(32)).max(MAX_INCOME_SOURCES).optional(),
 });
 
-app.patch("/api/settings", async (request) => {
+app.patch("/api/settings", async (request, reply) => {
   const body = settingsSchema.parse(request.body);
   const patch: Record<string, unknown> = { ...body };
+
+  // Пояс приходит строкой от клиента, а по нему считаются «сегодня» и час
+  // напоминания: неизвестное значение сломало бы и то, и другое молча.
+  if (body.timezone !== undefined) {
+    try {
+      new Intl.DateTimeFormat("ru-RU", { timeZone: body.timezone });
+    } catch {
+      await reply.code(400).send({ error: "не знаю такого часового пояса" });
+      return;
+    }
+  }
 
   if (body.monthlyBudget !== undefined) {
     patch["monthlyBudget"] = body.monthlyBudget === null ? null : body.monthlyBudget.toFixed(2);
