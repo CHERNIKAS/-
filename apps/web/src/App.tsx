@@ -110,43 +110,26 @@ export function App() {
       )}
       {tab === "settings" && (
         <>
-          <div className="chips" style={{ padding: "12px 0 18px" }}>
-            <button
-              className={more === "settings" ? "pill on" : "pill ghost"}
-              onClick={() => {
-                tap();
-                setMore("settings");
-              }}
-            >
-              Настройки
-            </button>
-            <button
-              className={more === "categories" ? "pill on" : "pill ghost"}
-              onClick={() => {
-                tap();
-                setMore("categories");
-              }}
-            >
-              Категории
-            </button>
-            <button
-              className={more === "recurring" ? "pill on" : "pill ghost"}
-              onClick={() => {
-                tap();
-                setMore("recurring");
-              }}
-            >
-              Регулярные
-            </button>
-            <button
-              className={more === "shared" ? "pill on" : "pill ghost"}
-              onClick={() => {
-                tap();
-                setMore("shared");
-              }}
-            >
-              Общий бюджет
-            </button>
+          <div className="scroller equal" style={{ padding: "12px 0 18px" }}>
+            {(
+              [
+                ["settings", "Основное"],
+                ["categories", "Категории"],
+                ["recurring", "Регулярные"],
+                ["shared", "Общий"],
+              ] as const
+            ).map(([key, title]) => (
+              <button
+                key={key}
+                className={more === key ? "pill on" : "pill ghost"}
+                onClick={() => {
+                  tap();
+                  setMore(key);
+                }}
+              >
+                {title}
+              </button>
+            ))}
           </div>
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}

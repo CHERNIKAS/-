@@ -30,7 +30,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
       <p className="label" style={{ margin: "12px 2px 10px" }}>
         Валюта отображения
       </p>
-      <div className="chips" style={{ marginBottom: 20 }}>
+      <div className="scroller equal" style={{ marginBottom: 12 }}>
         {CURRENCIES.map((c) => (
           <button
             key={c}
@@ -41,7 +41,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
           </button>
         ))}
       </div>
-      <p className="dim" style={{ margin: "-14px 2px 20px" }}>
+      <p className="dim" style={{ margin: "0 2px 22px" }}>
         Меняется только показ. Трата навсегда остаётся в той валюте, в которой была.
       </p>
 
@@ -120,7 +120,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         />
         <button
           className="pill"
-          style={{ padding: "14px 18px" }}
+          style={{ minHeight: 50, padding: "0 20px" }}
           onClick={() => {
             const value = Number(budget.replace(",", "."));
             void patch({ monthlyBudget: budget.trim() === "" ? null : value });
@@ -153,7 +153,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
         {exported ?? "Файл придёт сообщением от бота — скачать напрямую из мини-аппа Telegram не даёт."}
       </p>
 
-      <p className="dim" style={{ margin: "24px 2px 0" }}>
+      <p className="dim" style={{ margin: "24px 2px 8px" }}>
         Часовой пояс: {user.timezone}
       </p>
     </>
