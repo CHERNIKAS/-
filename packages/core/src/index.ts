@@ -10,3 +10,4 @@ export * from "./chart/donut.js";
 export * from "./periods.js";
 export * from "./refunds.js";
 export * from "./icons.js";
+export * from "./plural.js";

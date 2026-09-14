@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ReviewGroup } from "../api.js";
-import { dayTitle, money, moneyExact } from "../format.js";
+import { dayTitle, money, moneyExact, plural } from "../format.js";
 import { notify, tap } from "../telegram.js";
 
 /**
@@ -70,7 +70,11 @@ export function Review({
     tap();
     setChoice((current) => {
       const next = { ...current };
-      for (const item of group.items) next[item.id] = kind;
+      // Решение по направлению каждой строки: в «доход» не должны уезжать
+      // отправки, даже если в группе они соседствуют с приходами.
+      for (const item of group.items) {
+        next[item.id] = kind === "transfer" ? "transfer" : item.incoming ? "income" : "expense";
+      }
       return next;
     });
   }
@@ -102,23 +106,24 @@ export function Review({
         const days = group.items.map((item) => item.spentAt).sort();
         const decided = group.items.filter((item) => choice[item.id] !== undefined);
         const mine = decided.filter((item) => choice[item.id] === "transfer").length;
-        const expanded = open === group.counterparty;
+        const groupKey = `${group.counterparty}|${incoming ? "in" : "out"}`;
+        const expanded = open === groupKey;
 
         return (
-          <div key={group.counterparty} style={{ marginBottom: 14 }}>
+          <div key={groupKey} style={{ marginBottom: 14 }}>
             <div className="card" style={{ padding: "12px 16px" }}>
               <button
                 className="item"
                 style={{ padding: 0 }}
                 onClick={() => {
                   tap();
-                  setOpen(expanded ? null : group.counterparty);
+                  setOpen(expanded ? null : groupKey);
                 }}
               >
                 <span className="grow">
                   <span className="title">{shorten(group.counterparty)}</span>
                   <span className="sub">
-                    {group.count} операций · {money(sum, currency)} ·{" "}
+                    {incoming ? "приходы" : "отправки"} · {plural(group.count, "операция", "операции", "операций")} · {money(sum, currency)} ·{" "}
                     {days[0] === days[days.length - 1]
                       ? dayTitle(days[0] ?? today, today)
                       : `${dayTitle(days[0] ?? today, today)} — ${dayTitle(days[days.length - 1] ?? today, today)}`}

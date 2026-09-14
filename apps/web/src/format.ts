@@ -1,18 +1,27 @@
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", UAH: "₴", TRY: "₺" };
 
+/** Минус ставится перед знаком валюты: «−$50», а не «$-50». */
 export function money(amount: number, currency: string): string {
   const digits = Math.abs(amount) < 10 && amount !== 0 ? 2 : 0;
-  return `${SYMBOL[currency] ?? ""}${new Intl.NumberFormat("ru-RU", {
+  return `${amount < 0 ? "−" : ""}${SYMBOL[currency] ?? ""}${new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).format(amount)}`;
+  }).format(Math.abs(amount))}`;
 }
 
 export function moneyExact(amount: number, currency: string): string {
-  return `${SYMBOL[currency] ?? ""}${new Intl.NumberFormat("ru-RU", {
+  return `${amount < 0 ? "−" : ""}${SYMBOL[currency] ?? ""}${new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount)}`;
+  }).format(Math.abs(amount))}`;
+}
+
+/** «1 трата», «3 траты», «5 трат»: число со словом в нужной форме. */
+export function plural(count: number, one: string, few: string, many: string): string {
+  const n = Math.abs(count) % 100;
+  const last = n % 10;
+  const word = n > 10 && n < 20 ? many : last === 1 ? one : last >= 2 && last <= 4 ? few : many;
+  return `${count} ${word}`;
 }
 
 const MONTHS = [

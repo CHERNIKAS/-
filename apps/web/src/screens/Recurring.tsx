@@ -1,6 +1,7 @@
+import { Confirm } from "../Confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Category, type RecurringItem } from "../api.js";
-import { moneyExact } from "../format.js";
+import { moneyExact, plural } from "../format.js";
 import { CategorySheet } from "../CategorySheet.js";
 import { notify, tap } from "../telegram.js";
 
@@ -24,6 +25,7 @@ export function Recurring({
 }) {
   const [items, setItems] = useState<RecurringItem[]>([]);
   const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<RecurringItem | null>(null);
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -86,7 +88,7 @@ export function Recurring({
     <>
       <div className="between" style={{ padding: "12px 2px 14px" }}>
         <p className="label">Регулярные платежи</p>
-        <span className="dim">{items.filter((i) => i.active).length} активных</span>
+        <span className="dim">{plural(items.filter((i) => i.active).length, "активный", "активных", "активных")}</span>
       </div>
 
       <div className="card rows" style={{ padding: "2px 16px", marginBottom: 16 }}>
@@ -121,6 +123,20 @@ export function Recurring({
               }}
             >
               {item.active ? "вкл" : "выкл"}
+            </button>
+            {/* Ошибочный платёж раньше можно было только выключить: он оставался
+                в списке навсегда. */}
+            <button
+              className="danger-square"
+              aria-label={`Удалить ${item.title}`}
+              onClick={() => {
+                tap();
+                setRemoving(item);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 7h16M9.5 7V5h5v2M6.5 7l1 12.5h9L17.5 7" />
+              </svg>
             </button>
           </div>
         ))}
@@ -209,6 +225,20 @@ export function Recurring({
         >
           Добавить платёж
         </button>
+      )}
+      {removing !== null && (
+        <Confirm
+          title="Удалить платёж?"
+          detail={`${removing.title} · ${moneyExact(removing.amount, removing.currency)} · ${removing.dayOfMonth} числа`}
+          onCancel={() => setRemoving(null)}
+          onConfirm={async () => {
+            await api.removeRecurring(removing.id);
+            notify("success");
+            setRemoving(null);
+            await load();
+            onChanged();
+          }}
+        />
       )}
     </>
   );

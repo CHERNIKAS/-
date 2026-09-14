@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type BalanceState } from "../api.js";
-import { dayTitle, money, moneyExact } from "../format.js";
+import { dayTitle, money, moneyExact, plural } from "../format.js";
 import { guessIcon, PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { tint } from "../palette.js";
@@ -86,7 +86,7 @@ export function Balance({ currency, today }: { currency: string; today: string }
                 <span className="grow">
                   <span className="title">{row.place}</span>
                   <span className="sub">
-                    {row.moves} движений · последнее {dayTitle(row.lastAt, today)}
+                    {plural(row.moves, "движение", "движения", "движений")} · последнее {dayTitle(row.lastAt, today)}
                   </span>
                 </span>
                 <span className="amount" style={{ color: row.amount < 0 ? "var(--rose)" : undefined }}>

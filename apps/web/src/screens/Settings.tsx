@@ -1,3 +1,4 @@
+import { plural } from "../format.js";
 import { useState } from "react";
 import { api, type State } from "../api.js";
 import { tap } from "../telegram.js";
@@ -37,6 +38,16 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
   const user = state.user;
   const detected = deviceZone();
   const [pickingZone, setPickingZone] = useState(false);
+  // Час живёт локально и уходит на сервер каждым нажатием: общий «занято» на
+  // patch раньше глотал быстрые нажатия, и из пяти срабатывало одно.
+  const [hour, setHour] = useState(state.user.reminderHour);
+
+  function moveHour(step: number) {
+    tap();
+    const next = (hour + step + 24) % 24;
+    setHour(next);
+    void api.settings({ reminderHour: next }).then(onChanged);
+  }
 
   function saveBudget() {
     const value = Number(budget.replace(",", "."));
@@ -85,7 +96,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
             className={user.reminderEnabled ? "pill on" : "pill ghost"}
             onClick={() => void patch({ reminderEnabled: !user.reminderEnabled })}
           >
-            {user.reminderEnabled ? `${String(user.reminderHour).padStart(2, "0")}:00` : "выкл"}
+            {user.reminderEnabled ? `${String(hour).padStart(2, "0")}:00` : "выкл"}
           </button>
         </div>
 
@@ -96,13 +107,13 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
             </span>
             <button
               className="pill ghost"
-              onClick={() => void patch({ reminderHour: (user.reminderHour + 23) % 24 })}
+              onClick={() => moveHour(-1)}
             >
               −
             </button>
             <button
               className="pill ghost"
-              onClick={() => void patch({ reminderHour: (user.reminderHour + 1) % 24 })}
+              onClick={() => moveHour(1)}
             >
               +
             </button>
@@ -202,7 +213,7 @@ export function Settings({ state, onChanged }: { state: State; onChanged: () => 
           setExported("Готовлю файл…");
           void api
             .exportCsv()
-            .then((r) => setExported(`Отправил в чат: ${r.count} трат`))
+            .then((r) => setExported(`Отправил в чат: ${plural(r.count, "операция", "операции", "операций")}`))
             .catch(() => setExported("Не получилось выгрузить"));
         }}
       >

@@ -1,4 +1,4 @@
-import { type Currency, categorize, classify, digest } from "@costnote/core";
+import { type Currency, categorize, classify, digest, plural } from "@costnote/core";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Api, Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
@@ -237,7 +237,7 @@ async function runSuggestions(api: Api, users: AppUser[], now: Date): Promise<vo
 
     for (const s of suggestions) {
       lines.push(
-        `<b>${escapeHtml(s.merchant)}</b> — ${s.count} трат, <code>${moneyShort(s.totalUsd / rate, base)}</code>`,
+        `<b>${escapeHtml(s.merchant)}</b> — ${plural(s.count, "трата", "траты", "трат")}, <code>${moneyShort(s.totalUsd / rate, base)}</code>`,
       );
       kb.text(`Завести «${s.merchant.slice(0, 40)}»`, `g:add:${suggestionKey(s.merchant)}`).row();
     }

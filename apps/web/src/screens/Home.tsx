@@ -1,5 +1,5 @@
 import type { Expense, State } from "../api.js";
-import { dayTitle, money, moneyExact } from "../format.js";
+import { dayTitle, money, moneyExact, plural } from "../format.js";
 import { SwipeRow } from "../SwipeRow.js";
 import { PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
@@ -203,7 +203,7 @@ export function Home({
           <span className="grow">
             <span className="title">Разобрать приходы</span>
             <span className="sub">
-              {state.needsReview} операций: доход это или перевод между своими счетами
+              {plural(state.needsReview, "операция", "операции", "операций")}: доход это или перевод между своими счетами
             </span>
           </span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

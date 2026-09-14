@@ -1,3 +1,4 @@
+import { plural } from "../format.js";
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Confirm } from "../Confirm.js";
@@ -91,9 +92,9 @@ export function Imports({ onChanged }: { onChanged: () => void }) {
 /** Что именно лежит в файле: удаляя, человек должен видеть, что теряет. */
 function describe(row: Row): string {
   const parts = [row.createdAt];
-  if (row.expenses > 0) parts.push(`${row.expenses} трат`);
-  if (row.incomes > 0) parts.push(`${row.incomes} доходов`);
-  if (row.transfers > 0) parts.push(`${row.transfers} переносов`);
+  if (row.expenses > 0) parts.push(plural(row.expenses, "трата", "траты", "трат"));
+  if (row.incomes > 0) parts.push(plural(row.incomes, "доход", "дохода", "доходов"));
+  if (row.transfers > 0) parts.push(plural(row.transfers, "перенос", "переноса", "переносов"));
   if (row.total === 0) parts.push("операций не осталось");
   return parts.join(" · ");
 }

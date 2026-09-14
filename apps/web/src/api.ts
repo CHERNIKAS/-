@@ -196,6 +196,8 @@ export const api = {
     categorySlug?: string;
   }) => request<{ id: number }>("/recurring", { method: "POST", body: JSON.stringify(payload) }),
 
+  removeRecurring: (id: number) => request<{ ok: true }>(`/recurring/${id}`, { method: "DELETE" }),
+
   toggleRecurring: (id: number, active: boolean) =>
     request<{ ok: true }>(`/recurring/${id}`, {
       method: "PATCH",

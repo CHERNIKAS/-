@@ -909,9 +909,12 @@ app.get("/api/review", async (request) => {
     limit: 400,
   });
 
+  // Группа — это адрес и направление: приходы и отправки с одного адреса
+  // решаются по-разному, и в общей группе отправки уезжали в «доход».
+  const incomingRow = (row: (typeof rows)[number]) => row.incomeSource === "Приход" || row.kind === "income";
   const groups = new Map<string, typeof rows>();
   for (const row of rows) {
-    const key = row.counterparty ?? row.merchant ?? "";
+    const key = `${row.counterparty ?? row.merchant ?? ""} ${incomingRow(row) ? "in" : "out"}`;
     const list = groups.get(key) ?? [];
     list.push(row);
     groups.set(key, list);
@@ -921,8 +924,8 @@ app.get("/api/review", async (request) => {
     total: rows.length,
     groups: [...groups.entries()]
       .sort((a, b) => b[1].length - a[1].length)
-      .map(([counterparty, list]) => ({
-        counterparty,
+      .map(([key, list]) => ({
+        counterparty: key.split(" ")[0] ?? "",
         count: list.length,
         items: list.map((row) => {
           const amount = Number(row.amount);

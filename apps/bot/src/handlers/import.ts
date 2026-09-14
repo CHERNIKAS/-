@@ -1,4 +1,4 @@
-import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule } from "@costnote/core";
+import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule, plural } from "@costnote/core";
 import {
   applyMapping,
   describesMerchants,
@@ -167,7 +167,7 @@ export async function handleDocument(
 
     const lines = [
       `<b>${escape(name)}</b>`,
-      `${spending.length} трат · ${dates[0]} — ${dates[dates.length - 1]}`,
+      `${plural(spending.length, "трата", "траты", "трат")} · ${dates[0]} — ${dates[dates.length - 1]}`,
       `на <code>${moneyShort(sumUsd / rate, base)}</code>`,
       "",
       ...first.map(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { money } from "../format.js";
+import { money, plural } from "../format.js";
 import { guessIcon, MAX_INCOME_SOURCES, PALETTE } from "@costnote/core";
 import { CategoryIcon } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";
@@ -212,7 +212,7 @@ export function Categories({
                 <span className="grow">
                   <span className="title">{row.title}</span>
                   <span className="sub">
-                    {row.count === 0 ? "за 30 дней трат нет" : `${row.count} трат за 30 дней`}
+                    {row.count === 0 ? "за 30 дней трат нет" : `${plural(row.count, "трата", "траты", "трат")} за 30 дней`}
                   </span>
                 </span>
                 <span className="amount">{row.total === 0 ? "—" : money(row.total, currency)}</span>

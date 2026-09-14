@@ -1,4 +1,4 @@
-import { categorize, classify, type Currency, parseMessage, resolveSpentAt } from "@costnote/core";
+import { categorize, classify, type Currency, parseMessage, plural, resolveSpentAt } from "@costnote/core";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
@@ -291,7 +291,7 @@ async function notifyPartners(
   const text =
     count === 1
       ? `${name} записал трату в общий бюджет`
-      : `${name} записал ${count} трат в общий бюджет`;
+      : `${name} записал ${plural(count, "трату", "траты", "трат")} в общий бюджет`;
 
   for (const member of members) {
     if (member.userId === user.id) continue;

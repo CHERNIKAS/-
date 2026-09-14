@@ -342,6 +342,9 @@ export function App() {
             onClick={() => {
               tap();
               if (key !== "history") setFromStats(false);
+              // Повторное нажатие «Ещё» возвращает к списку разделов, а не
+              // оставляет в последнем открытом.
+              if (key === "settings" && tab === "settings") setMore(null);
               setTab(key);
             }}
           >
