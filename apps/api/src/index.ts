@@ -84,8 +84,23 @@ const BOT_TOKEN = process.env["BOT_TOKEN"] ?? "";
 const PORT = Number(process.env["PORT"] ?? 3000);
 const BOT_USERNAME = process.env["BOT_USERNAME"] ?? "costnote_bot";
 
-const app = Fastify({ logger: { level: process.env["LOG_LEVEL"] ?? "info" } });
+export const app = Fastify({ logger: { level: process.env["LOG_LEVEL"] ?? "info" } });
 await app.register(cors, { origin: true });
+
+/**
+ * Неверные поля запроса — это ответ 400 с понятной причиной.
+ *
+ * Без обработчика любая ошибка проверки уходила клиенту как 500, и кривая дата
+ * от приложения выглядела как падение сервера.
+ */
+app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+  if (error instanceof z.ZodError) {
+    return reply.code(400).send({ error: error.issues[0]?.message ?? "неверный запрос" });
+  }
+  request.log.error(error);
+  const status = error.statusCode ?? 500;
+  return reply.code(status >= 400 ? status : 500).send({ error: status >= 500 ? "ошибка сервера" : error.message });
+});
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -1590,4 +1605,7 @@ app.delete("/api/recurring/:id", async (request) => {
   return { ok: true };
 });
 
-await app.listen({ port: PORT, host: "0.0.0.0" });
+// В тестах сервер не слушает порт: запросы идут через app.inject.
+if (process.env["NODE_ENV"] !== "test") {
+  await app.listen({ port: PORT, host: "0.0.0.0" });
+}
