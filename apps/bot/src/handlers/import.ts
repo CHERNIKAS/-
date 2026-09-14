@@ -26,7 +26,6 @@ import {
   cancelImport,
   rateToUsd,
   schema,
-  today,
   userRules,
 } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";

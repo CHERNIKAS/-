@@ -1,5 +1,5 @@
 import { categorize, classify, type Currency, parseMessage, resolveSpentAt } from "@costnote/core";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";
@@ -11,15 +11,18 @@ import {
   activeLedgerId,
   applyRefund,
   createExpense,
+  expensesOfMessage,
+  messageRefundFingerprint,
+  removeExpense,
+  revertMessageRefunds,
   ledgersOf,
   findRefundTarget,
   listCategories,
-  softDelete,
   totalSince,
 } from "@costnote/core/data";
 import { membersOf } from "@costnote/core/data";
 import { refreshPanel } from "../panel.js";
-import { rateToUsd, today } from "@costnote/core/data";
+import { rateToUsd, } from "@costnote/core/data";
 import { recentCorrections, userRules } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
@@ -70,7 +73,7 @@ export async function handleExpenseMessage(
   }
 
   await deleteUserMessage(ctx);
-  await saveExpenses(ctx, user, routed.ledgerId, chatId, routed.text);
+  await saveExpenses(ctx, user, routed.ledgerId, chatId, routed.text, inserted[0]?.id ?? null);
 }
 
 /**
@@ -114,6 +117,7 @@ export async function saveExpenses(
   ledgerId: number,
   chatId: string,
   text: string,
+  rawInputId: number | null = null,
 ): Promise<void> {
   const parsed = parseMessage(text).filter((e) => e.ok);
   if (parsed.length === 0) return;
@@ -137,7 +141,11 @@ export async function saveExpenses(
       const target = await findRefundTarget(ledgerId, amount, currency, spentAt, entry.merchant);
 
       if (target !== undefined) {
-        await applyRefund(target.id, amount);
+        await applyRefund(
+          target.id,
+          amount,
+          rawInputId === null ? {} : { fingerprint: messageRefundFingerprint(rawInputId, amount) },
+        );
         await ctx.reply(
           refundCard({
             amount,
@@ -170,6 +178,7 @@ export async function saveExpenses(
         needsReview: false,
         kind: "income",
         incomeSource: entry.incomeSource,
+        rawInputId,
       });
 
       await ctx.reply(
@@ -217,6 +226,7 @@ export async function saveExpenses(
       merchant: decision.merchant,
       confidence: decision.confidence,
       needsReview: decision.needsReview,
+      rawInputId,
     });
 
     const baseRate = await rateToUsd(base, spentAt);
@@ -314,9 +324,13 @@ export function shiftDay(day: string, daysAgo: number): string {
 /**
  * Повторный разбор после правки сообщения.
  *
- * Старые траты этого сообщения удаляются мягко, карточки убираются, и всё
+ * Старые операции этого сообщения удаляются мягко, карточки убираются, и всё
  * записывается заново. Проще и честнее, чем угадывать, какую именно строку
  * человек поправил в сообщении из трёх трат.
+ *
+ * Операции ищутся по ссылке на сообщение, а не по времени карточек: раньше
+ * правка старого сообщения сносила всё, что внесено после него, доходы при
+ * этом задваивались, а возврат гасил покупку второй раз.
  */
 export async function handleEditedMessage(
   ctx: Context,
@@ -335,26 +349,28 @@ export async function handleEditedMessage(
   // Сообщение, которого бот не видел, правкой не становится тратой.
   if (!original) return;
 
-  const cards = await db.query.botMessages.findMany({
-    where: and(
-      eq(schema.botMessages.userId, user.id),
-      eq(schema.botMessages.kind, "card"),
-      isNull(schema.botMessages.cleanedAt),
-    ),
-    orderBy: desc(schema.botMessages.createdAt),
-    limit: 20,
-  });
+  const previous = await expensesOfMessage(original.id);
+  const removed: number[] = [];
+  for (const expense of previous) removed.push(...(await removeExpense(expense)));
 
-  for (const card of cards) {
-    if (card.expenseId === null) continue;
-    if (card.createdAt < original.receivedAt) continue;
+  await revertMessageRefunds(original.id);
 
-    await softDelete(card.expenseId);
-    await ctx.api.deleteMessage(card.chatId, card.messageId).catch(() => undefined);
-    await db
-      .update(schema.botMessages)
-      .set({ cleanedAt: new Date() })
-      .where(eq(schema.botMessages.id, card.id));
+  if (removed.length > 0) {
+    const cards = await db.query.botMessages.findMany({
+      where: and(
+        eq(schema.botMessages.kind, "card"),
+        inArray(schema.botMessages.expenseId, removed),
+        isNull(schema.botMessages.cleanedAt),
+      ),
+    });
+
+    for (const card of cards) {
+      await ctx.api.deleteMessage(card.chatId, card.messageId).catch(() => undefined);
+      await db
+        .update(schema.botMessages)
+        .set({ cleanedAt: new Date() })
+        .where(eq(schema.botMessages.id, card.id));
+    }
   }
 
   await db
@@ -362,5 +378,7 @@ export async function handleEditedMessage(
     .set({ text })
     .where(eq(schema.rawInputs.id, original.id));
 
-  await saveExpenses(ctx, user, ledgerId, chatId, text);
+  // Префикс книги в правленом тексте работает так же, как в новом сообщении.
+  const routed = await routeByPrefix(user, text, ledgerId);
+  await saveExpenses(ctx, user, routed.ledgerId, chatId, routed.text, original.id);
 }

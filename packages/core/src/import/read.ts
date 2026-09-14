@@ -115,7 +115,9 @@ async function readPdf(file: Uint8Array): Promise<Sheet> {
 
   const lines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    // Типографский минус вместо дефиса: без замены строка с ним не узнавалась
+    // как операция и пропадала целиком.
+    .map((line) => line.replace(/[−–](?=\s?\d)/g, "-").trim())
     .filter((line) => line !== "");
 
   return joinRecords(lines).map(splitPdfLine);

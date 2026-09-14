@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Expense } from "../api.js";
 import { dayTitle, money, moneyExact } from "../format.js";
 import { PeriodPicker } from "../PeriodPicker.js";
-import { type Range, rangeFor, rangeTitle } from "../periods.js";
+import { type Range, rangeFor, } from "../periods.js";
 import { SwipeRow } from "../SwipeRow.js";
 import { CategoryIcon, IconSearch } from "../icons.js";
 import { categoryColor, tint } from "../palette.js";

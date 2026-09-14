@@ -13,10 +13,11 @@ import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
 import { createCategoryFromSuggestion } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";
 import { startScheduler } from "./scheduler.js";
-import { listCategories, totalSince } from "@costnote/core/data";
-import { rateToUsd, refreshRates, today } from "@costnote/core/data";
+import { totalSince } from "@costnote/core/data";
+import { rateToUsd, refreshRates } from "@costnote/core/data";
 import {
   createSharedLedger,
+  confirmAuthRequest,
   decideAuthRequest,
   liveAuthRequest,
   revokeAllTokens,
@@ -39,6 +40,9 @@ bot.catch((err) => {
   console.error("ошибка в обработчике:", err.error);
 });
 
+/** Кто сейчас подключает Claude и какой запрос ждёт его кода. */
+const pendingClaude = new Map<number, { requestId: string; until: number }>();
+
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
@@ -47,26 +51,27 @@ bot.command("start", async (ctx) => {
   // Telegram передать данные при первом входе.
   const payload = ctx.match;
 
-  // Подключение Claude: страница входа отправила сюда, решение — кнопкой.
+  // Подключение Claude: страница входа отправила сюда, подтверждение — кодом
+  // с той же страницы. Кнопки мало: ссылку на бота может прислать кто угодно.
   if (typeof payload === "string" && payload.startsWith("mcp_")) {
     const found = await liveAuthRequest(payload.slice(4));
     if (found === undefined || found.approvedAt !== null || found.deniedAt !== null) {
       await ctx.reply("Ссылка устарела — начни подключение в Claude заново.");
       return;
     }
+    pendingClaude.set(user.id, { requestId: found.id, until: Date.now() + 10 * 60_000 });
     await ctx.reply(
       [
-        "<b>Подключить Claude?</b>",
+        "<b>Подключение Claude</b>",
         "",
-        "Claude сможет смотреть твои траты, доходы и итоги по всем книгам. Менять ничего не сможет.",
+        "Отправь сюда четыре цифры со страницы подключения.",
+        "Claude сможет смотреть твои траты, доходы и итоги. Менять ничего не сможет.",
         "",
-        "<i>Отключить в любой момент: /claude_off</i>",
+        "<i>Не начинал подключение сам — нажми «Отмена».</i>",
       ].join(NL),
       {
         parse_mode: "HTML",
-        reply_markup: new InlineKeyboard()
-          .text("Подключить", `mcp:ok:${found.id}`)
-          .text("Отмена", `mcp:no:${found.id}`),
+        reply_markup: new InlineKeyboard().text("Отмена", `mcp:no:${found.id}`),
       },
     );
     return;
@@ -128,25 +133,13 @@ bot.command("start", async (ctx) => {
   }
 });
 
-/**
- * Книги: личная, общая и книги дел.
- *
- * Переключатель один на бота и приложение: сменил здесь — сменилось и там.
- * Иначе получается ловушка, где пишешь в одну книгу, а смотришь другую.
- */
-bot.callbackQuery(/^mcp:(ok|no):(.+)$/, async (ctx) => {
-  const approve = ctx.match[1] === "ok";
+bot.callbackQuery(/^mcp:no:(.+)$/, async (ctx) => {
   const { user } = await ensureUser(ctx.from);
-  const done = await decideAuthRequest(ctx.match[2] ?? "", user.id, approve);
+  const done = await decideAuthRequest(ctx.match[1] ?? "", user.id, false);
+  pendingClaude.delete(user.id);
 
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(
-    !done
-      ? "Запрос уже обработан или устарел."
-      : approve
-        ? "Готово, Claude подключён. Вернись в браузер — вход завершится сам."
-        : "Отменено.",
-  );
+  await ctx.editMessageText(done ? "Отменено." : "Запрос уже обработан или устарел.");
 });
 
 bot.command("claude_off", async (ctx) => {
@@ -156,6 +149,12 @@ bot.command("claude_off", async (ctx) => {
   await ctx.reply(count > 0 ? "Claude отключён: доступ больше не работает." : "Подключений не было.");
 });
 
+/**
+ * Книги: личная, общая и книги дел.
+ *
+ * Переключатель один на бота и приложение: сменил здесь — сменилось и там.
+ * Иначе получается ловушка, где пишешь в одну книгу, а смотришь другую.
+ */
 bot.command("book", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
@@ -397,6 +396,26 @@ bot.on("message:document", async (ctx) => {
 bot.on("message:text", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
+
+  // Код подключения Claude перехватывается до разбора: «4821» иначе стало бы
+  // тратой на 4821.
+  const pending = pendingClaude.get(user.id);
+  if (pending !== undefined && pending.until > Date.now() && /^\s*\d{4}\s*$/.test(ctx.msg.text)) {
+    const result = await confirmAuthRequest(pending.requestId, user.id, ctx.msg.text);
+    if (result !== "wrong") pendingClaude.delete(user.id);
+
+    await ctx.reply(
+      result === "ok"
+        ? ["Готово, Claude подключён. Вернись в браузер — вход завершится сам.", "", "Отключить: /claude_off"].join(NL)
+        : result === "wrong"
+          ? "Код не тот. Проверь цифры на странице подключения."
+          : result === "locked"
+            ? "Слишком много неверных попыток — начни подключение в Claude заново."
+            : "Запрос устарел — начни подключение в Claude заново.",
+    );
+    return;
+  }
+
   await handleExpenseMessage(ctx, user, ledgerId, ctx.msg.text);
 });
 

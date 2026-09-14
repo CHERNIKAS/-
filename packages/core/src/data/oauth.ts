@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db, schema } from "./db.js";
 
@@ -42,14 +42,45 @@ export async function createAuthRequest(values: {
   state: string | null;
   codeChallenge: string;
   scope: string;
-}): Promise<string> {
+}): Promise<{ id: string; confirmCode: string }> {
   const id = secret(24);
+  const confirmCode = String(randomInt(0, 10_000)).padStart(4, "0");
   await db.insert(schema.oauthRequests).values({
     id,
     ...values,
+    confirmCode,
     expiresAt: new Date(Date.now() + REQUEST_TTL_MINUTES * 60_000),
   });
-  return id;
+  return { id, confirmCode };
+}
+
+const MAX_CONFIRM_ATTEMPTS = 3;
+
+/**
+ * Подтверждение кодом со страницы входа.
+ *
+ * Код видит только тот, кто начал подключение. Три ошибки — и запрос гаснет:
+ * четыре цифры иначе перебираются.
+ */
+export async function confirmAuthRequest(
+  id: string,
+  userId: number,
+  code: string,
+): Promise<"ok" | "wrong" | "locked" | "gone"> {
+  const found = await liveAuthRequest(id);
+  if (found === undefined || found.approvedAt !== null || found.deniedAt !== null) return "gone";
+
+  if ((found.confirmCode ?? "") !== code.trim()) {
+    const attempts = found.confirmAttempts + 1;
+    const locked = attempts >= MAX_CONFIRM_ATTEMPTS;
+    await db
+      .update(schema.oauthRequests)
+      .set(locked ? { confirmAttempts: attempts, deniedAt: new Date(), userId } : { confirmAttempts: attempts })
+      .where(eq(schema.oauthRequests.id, id));
+    return locked ? "locked" : "wrong";
+  }
+
+  return (await decideAuthRequest(id, userId, true)) ? "ok" : "gone";
 }
 
 export type AuthRequest = typeof schema.oauthRequests.$inferSelect;
@@ -77,13 +108,19 @@ export async function decideAuthRequest(id: string, userId: number, approve: boo
   return rows.length > 0;
 }
 
-/** Код выдаётся странице входа один раз, после подтверждения в боте. */
+/**
+ * Код выдаётся странице входа после подтверждения в боте.
+ *
+ * Пока код не обменян на токен, его можно выдать заново: если ответ страницы
+ * потерялся в сети, человек иначе застревал на «время вышло». Прежний код при
+ * этом перестаёт работать.
+ */
 export async function issueCode(id: string): Promise<string | undefined> {
   const code = secret(32);
   const rows = await db
     .update(schema.oauthRequests)
     .set({ codeHash: hashSecret(code) })
-    .where(and(eq(schema.oauthRequests.id, id), isNull(schema.oauthRequests.codeHash)))
+    .where(and(eq(schema.oauthRequests.id, id), isNull(schema.oauthRequests.codeUsedAt)))
     .returning({ id: schema.oauthRequests.id });
   return rows.length > 0 ? code : undefined;
 }

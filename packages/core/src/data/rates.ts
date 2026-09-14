@@ -45,8 +45,12 @@ export async function rateToUsd(currency: Currency, day: string): Promise<number
   });
   if (earliest) return Number(earliest.toUsd);
 
+  // Курса нет ни в базе, ни в сети. Единица здесь молча превращала гривну в
+  // доллар — лучше честно не сохранить, чем записать сумму в сорок раз больше.
   const fetched = await refreshRates();
-  return fetched[currency] ?? 1;
+  const rate = fetched[currency];
+  if (rate === undefined) throw new Error(`нет курса ${currency}: источники недоступны`);
+  return rate;
 }
 
 type RatesMap = Partial<Record<Currency, number>>;

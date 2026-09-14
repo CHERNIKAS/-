@@ -11,12 +11,12 @@ import {
   categoryBySlug,
   expenseById,
   listCategories,
+  removeExpense,
   setCategory,
-  softDelete,
   totalSince,
 } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";
-import { rateToUsd, today } from "@costnote/core/data";
+import { rateToUsd, } from "@costnote/core/data";
 import { learnRule } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
@@ -117,7 +117,8 @@ export async function handleCallback(
     }
 
     case "delyes": {
-      await softDelete(expenseId);
+      // Вместе с встречной строкой переноса и движением по балансу.
+      await removeExpense(expense);
       await ctx.editMessageText("<i>Трата удалена</i>", { parse_mode: "HTML" });
       await ctx.answerCallbackQuery("Удалено");
       return;

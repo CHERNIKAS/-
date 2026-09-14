@@ -2,7 +2,7 @@ import type { Currency } from "../index.js";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db, schema } from "./db.js";
 import { PAIR_WINDOW_DAYS, pairTolerance } from "../import/kinds.js";
-import { looksLikeTransfer, sameMerchant } from "../refunds.js";
+import { hasMerchantWords, looksLikeTransfer, sameMerchant } from "../refunds.js";
 
 export type Expense = typeof schema.expenses.$inferSelect;
 export type Category = typeof schema.categories.$inferSelect;
@@ -35,6 +35,8 @@ export async function createExpense(values: {
   incomeSource?: string | null;
   counterparty?: string | null;
   needsKindReview?: boolean;
+  /** Сообщение в чате, из которого пришла трата. */
+  rawInputId?: number | null;
 }): Promise<Expense> {
   const [row] = await db
     .insert(schema.expenses)
@@ -54,6 +56,7 @@ export async function createExpense(values: {
       incomeSource: values.incomeSource ?? null,
       counterparty: values.counterparty ?? null,
       needsKindReview: values.needsKindReview ?? false,
+      rawInputId: values.rawInputId ?? null,
     })
     .returning();
 
@@ -134,10 +137,11 @@ export async function findRefundTarget(
   // чем возврат, и сумма сама по себе ничего не доказывает: пополнение на
   // 19.95 «погасило» покупку на 19.27 просто потому, что числа рядом.
   // Написанному руками «возврат 15 лир» верим и без названия: человек уже
-  // сказал, что это возврат.
-  if (options.requireMerchant === true) return named;
+  // сказал, что это возврат. Но если название написано, оно обязано совпасть:
+  // «вернул долг 100» гасил первую попавшуюся покупку на сотню.
+  if (options.requireMerchant === true || hasMerchantWords(description)) return named;
 
-  return named ?? candidates[0];
+  return candidates[0];
 }
 
 /**
@@ -271,4 +275,84 @@ export async function totalSince(ledgerId: number, fromDay: string): Promise<num
     );
 
   return Number(row?.total ?? 0);
+}
+
+/**
+ * Удаление операции вместе со всем, что она за собой потянула.
+ *
+ * Раньше удалялась одна строка: встречная половина переноса в другой книге
+ * оставалась жить, движение по балансу — тоже, и остаток с чужой книгой
+ * начинали врать. Возвращает все удалённые строки, чтобы убрать их карточки.
+ */
+export async function removeExpense(expense: Expense): Promise<number[]> {
+  const removed = [expense.id];
+  await softDelete(expense.id);
+  await dropBalanceEntry(expense.balanceEntryId);
+
+  if (expense.pairedWithId === null) return removed;
+
+  const mirror = await expenseById(expense.pairedWithId);
+  if (mirror === undefined || mirror.deletedAt !== null) return removed;
+
+  const ownMirror =
+    (expense.counterparty ?? "").startsWith("book:") || (mirror.counterparty ?? "").startsWith("book:");
+
+  if (ownMirror) {
+    // Перенос в свою книгу — одна операция из двух строк: уходит целиком.
+    await softDelete(mirror.id);
+    await dropBalanceEntry(mirror.balanceEntryId);
+    removed.push(mirror.id);
+  } else {
+    // Пара из двух выписок: вторая половина — настоящая операция, её не
+    // трогаем, но без пары это снова непонятные деньги и они идут в разбор.
+    await db
+      .update(schema.expenses)
+      .set({ pairedWithId: null, needsKindReview: true, updatedAt: new Date() })
+      .where(eq(schema.expenses.id, mirror.id));
+  }
+
+  return removed;
+}
+
+async function dropBalanceEntry(id: number | null): Promise<void> {
+  if (id === null) return;
+  await db.delete(schema.balanceEntries).where(eq(schema.balanceEntries.id, id));
+}
+
+/** Живые операции, созданные одним сообщением в чате. */
+export async function expensesOfMessage(rawInputId: number): Promise<Expense[]> {
+  return db.query.expenses.findMany({
+    where: and(eq(schema.expenses.rawInputId, rawInputId), isNull(schema.expenses.deletedAt)),
+  });
+}
+
+/** Отпечаток возврата, пришедшего сообщением: по нему правка сообщения его откатит. */
+export function messageRefundFingerprint(rawInputId: number, amount: number): string {
+  return `raw:${rawInputId}:${amount.toFixed(2)}`;
+}
+
+/**
+ * Откат возвратов, которые применило сообщение.
+ *
+ * Без него правка сообщения «возврат 15» гасила ту же покупку второй раз.
+ */
+export async function revertMessageRefunds(rawInputId: number): Promise<void> {
+  const rows = await db.query.expenses.findMany({
+    where: sql`${schema.expenses.refundFingerprint} like ${`raw:${rawInputId}:%`}`,
+  });
+
+  for (const row of rows) {
+    const amount = Number((row.refundFingerprint ?? "").split(":")[2] ?? 0);
+    const left = Math.max(0, Number(row.refundedAmount) - amount);
+
+    await db
+      .update(schema.expenses)
+      .set({
+        refundedAmount: left.toFixed(2),
+        refundedAt: left === 0 ? null : row.refundedAt,
+        refundFingerprint: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.expenses.id, row.id));
+  }
 }

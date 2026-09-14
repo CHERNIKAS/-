@@ -5,7 +5,6 @@ import { InlineKeyboard } from "grammy";
 import { activeLedgerId, db, schema } from "@costnote/core/data";
 import { env } from "./env.js";
 import { moneyShort } from "./format.js";
-import { totalSince } from "@costnote/core/data";
 import { rateToUsd, refreshRates } from "@costnote/core/data";
 import {
   byCategory,
@@ -16,7 +15,7 @@ import {
   userRules,
   dueRecurring,
   ledgersOf,
-  markCharged,
+  claimRecurring,
   pendingSuggestions,
   totalUsd,
 } from "@costnote/core/data";
@@ -104,7 +103,9 @@ async function spentByBook(
   const result: { title: string; usd: number }[] = [];
 
   for (const book of books) {
-    const usd = await totalSince(book.id, day);
+    // Ровно этот день: «с этого дня и дальше» захватывало и следующие, и итог
+    // вчерашнего дня в полночь включал сегодняшние траты.
+    const usd = await totalUsd(book.id, { from: day, to: day, label: day });
     result.push({ title: book.kind === "personal" ? "Личное" : book.title, usd });
   }
 
@@ -268,6 +269,9 @@ async function runRecurring(api: Api, users: AppUser[], now: Date): Promise<void
       const due = await dueRecurring(book.id, day);
 
       for (const item of due) {
+        // Сначала отметка, потом трата: два наложившихся прохода не начислят дважды.
+        if (!(await claimRecurring(item.id, day))) continue;
+
         const amount = Number(item.amount);
         const rate = await rateToUsd(item.currency as Currency, day);
 
@@ -283,8 +287,6 @@ async function runRecurring(api: Api, users: AppUser[], now: Date): Promise<void
           confidence: null,
           needsReview: false,
         });
-
-        await markCharged(item.id, day);
 
         await api
           .sendMessage(
@@ -524,8 +526,21 @@ async function monthTotals(
 
 export function startScheduler(bot: Bot): void {
   let ratesDay = "";
+  let running = false;
 
   const tick = async () => {
+    // Проход может длиться дольше интервала (модель, сеть): второй поверх
+    // первого рассылал бы и начислял то же самое ещё раз.
+    if (running) return;
+    running = true;
+    try {
+      await tickOnce();
+    } finally {
+      running = false;
+    }
+  };
+
+  const tickOnce = async () => {
     const now = new Date();
 
     try {

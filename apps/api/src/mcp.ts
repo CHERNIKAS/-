@@ -143,7 +143,7 @@ export async function registerMcp(app: FastifyInstance, botUsername: string) {
     if (q["response_type"] !== "code") return fail("unsupported_response_type");
     if (q["code_challenge_method"] !== "S256" || !q["code_challenge"]) return fail("invalid_request");
 
-    const id = await createAuthRequest({
+    const { id, confirmCode } = await createAuthRequest({
       clientId: client.id,
       redirectUri,
       state: q["state"] ?? null,
@@ -159,7 +159,9 @@ export async function registerMcp(app: FastifyInstance, botUsername: string) {
         page(
           `<p><b>${escapeHtml(client.name ?? "Приложение")}</b> просит доступ к твоим тратам — только чтение.</p>
            <p class="dim">После подтверждения вернёмся на ${escapeHtml(back.host)}</p>
-           <a class="btn" href="${link}" target="_blank" rel="noopener">Подтвердить в Telegram</a>
+           <p style="margin:18px 0 4px">Открой бота и отправь ему этот код:</p>
+           <div class="code">${confirmCode}</div>
+           <a class="btn" href="${link}" target="_blank" rel="noopener">Открыть Telegram</a>
            <p class="dim" id="status">Жду подтверждения…</p>
            <script>
              const id = ${JSON.stringify(id)};
@@ -283,6 +285,7 @@ function page(body: string): string {
 body{font:16px/1.5 system-ui,sans-serif;background:#0f1115;color:#e8e8ea;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px;box-sizing:border-box}
 main{max-width:380px;width:100%;background:#181b21;border-radius:18px;padding:28px}
 h1{font-size:20px;margin:0 0 12px}.dim{color:#8b8f98;font-size:14px}
+.code{font:700 40px/1 ui-monospace,monospace;letter-spacing:10px;text-align:center;margin:8px 0}
 .btn{display:block;text-align:center;background:#2aabee;color:#fff;text-decoration:none;padding:14px;border-radius:12px;font-weight:600;margin:18px 0 8px}
 </style></head><body><main><h1>CostNote</h1>${body}</main></body></html>`;
 }
@@ -341,10 +344,17 @@ function buildServer(user: AppUser): McpServer {
     async ({ period, from, to, book_id }) => {
       const book = await resolveBook(book_id);
       const today = localToday(user.timezone);
+      // Одна дата тоже диапазон: «с 1 августа» — до сегодня, «до 10 августа» —
+      // с начала того месяца. Раньше одинокая дата молча превращалась в текущий месяц.
       const range =
-        from !== undefined && to !== undefined
-          ? { from, to, label: `${from} — ${to}` }
+        from !== undefined || to !== undefined
+          ? {
+              from: from ?? `${(to ?? today).slice(0, 7)}-01`,
+              to: to ?? today,
+              label: `${from ?? ""} — ${to ?? ""}`,
+            }
           : buildPeriod((period ?? "month") as PeriodKey, today);
+      if (range.from > range.to) throw new Error("from позже to");
       const rate = await rateToUsd(user.currency as Currency, today);
 
       const [categories, currencies, total, income] = await Promise.all([

@@ -9,6 +9,7 @@ import {
   DEFAULT_INCOME_SOURCES,
   FALLBACK_CATEGORY_SLUG,
   guessIcon,
+  isRealDate,
   MAX_INCOME_SOURCES,
   MAX_CATEGORIES,
   buildPeriod,
@@ -36,6 +37,8 @@ import {
   createLedger,
   recentBalanceEntries,
   removeBalanceEntry,
+  removeExpense,
+  UNCATEGORIZED,
   createSharedLedger,
   MAX_LEDGERS,
   deleteRecurring,
@@ -53,8 +56,6 @@ import {
   schema,
   setCategory,
   setRecurringActive,
-  softDelete,
-  today,
   totalSince,
   totalUsd,
   updateUser,
@@ -116,6 +117,9 @@ app.addHook("preHandler", async (request, reply) => {
 });
 
 app.get("/api/health", async () => ({ ok: true }));
+
+/** Дата операции: несуществующая «2026-02-31» раньше доходила до базы и роняла запрос. */
+const isoDay = z.string().refine(isRealDate, "дата в виде YYYY-MM-DD");
 
 await registerMcp(app, BOT_USERNAME);
 
@@ -312,8 +316,8 @@ function serialize(
 app.get("/api/expenses", async (request) => {
   const query = z
     .object({
-      from: z.string().optional(),
-      to: z.string().optional(),
+      from: isoDay.optional(),
+      to: isoDay.optional(),
       category: z.string().optional(),
       payment: z.enum(["card", "cash", "transfer"]).optional(),
       limit: z.coerce.number().max(200).default(100),
@@ -329,7 +333,9 @@ app.get("/api/expenses", async (request) => {
   const categories = await listCategories(ledgerId);
 
   const category =
-    query.category === undefined ? undefined : await categoryBySlug(ledgerId, query.category);
+    query.category === undefined || query.category === UNCATEGORIZED
+      ? undefined
+      : await categoryBySlug(ledgerId, query.category);
 
   const rows = await db.query.expenses.findMany({
     where: and(
@@ -338,6 +344,8 @@ app.get("/api/expenses", async (request) => {
       lte(schema.expenses.spentAt, to),
       isNull(schema.expenses.deletedAt),
       ...(category === undefined ? [] : [eq(schema.expenses.categoryId, category.id)]),
+      // «Без категории» из разбивки аналитики ведёт сюда же.
+      ...(query.category === UNCATEGORIZED ? [isNull(schema.expenses.categoryId)] : []),
       ...(query.payment === undefined ? [] : [eq(schema.expenses.payment, query.payment)]),
     ),
     orderBy: [desc(schema.expenses.spentAt), desc(schema.expenses.id)],
@@ -352,7 +360,7 @@ const createSchema = z.object({
   amount: z.number().positive().optional(),
   currency: z.enum(CURRENCIES).optional(),
   categorySlug: z.string().optional(),
-  spentAt: z.string().optional(),
+  spentAt: isoDay.optional(),
   merchant: z.string().max(128).optional(),
   /** Приложение может сказать прямо, что это доход, — без слов в строке. */
   kind: z.enum(["expense", "income"]).optional(),
@@ -557,7 +565,7 @@ const patchSchema = z.object({
   categorySlug: z.string().optional(),
   amount: z.number().positive().optional(),
   currency: z.enum(CURRENCIES).optional(),
-  spentAt: z.string().optional(),
+  spentAt: isoDay.optional(),
   merchant: z.string().max(128).optional(),
   note: z.string().max(500).nullable().optional(),
   payment: z.enum(["card", "cash", "transfer"]).optional(),
@@ -592,6 +600,18 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   const expense = await expenseById(id);
   if (!expense || expense.ledgerId !== ledgerId || expense.deletedAt !== null) {
     await reply.code(404).send({ error: "трата не найдена" });
+    return;
+  }
+
+  // Книга для переноса проверяется до любых изменений: раньше отказ приходил,
+  // когда встречная строка и баланс уже были переписаны.
+  const targetBook =
+    body.toBook === undefined || body.toBook === null
+      ? undefined
+      : (await ledgersOf(user.id)).find((b) => b.id === body.toBook);
+
+  if (body.toBook !== undefined && body.toBook !== null && (targetBook === undefined || targetBook.id === ledgerId)) {
+    await reply.code(400).send({ error: "в эту книгу перенести нельзя" });
     return;
   }
 
@@ -662,6 +682,45 @@ app.patch("/api/expenses/:id", async (request, reply) => {
     patch["rateToUsd"] = (await rateToUsd(currency, day)).toFixed(8);
   }
 
+  // Сумма, валюта или дата поменялись, а перенос и место не трогали — их
+  // вторые половины обязаны поменяться вместе, иначе книги и баланс расходятся.
+  const moved = body.amount !== undefined || body.currency !== undefined || body.spentAt !== undefined;
+
+  if (moved && body.toBook === undefined && expense.pairedWithId !== null) {
+    const mirror = await expenseById(expense.pairedWithId);
+    if (mirror !== undefined && mirror.deletedAt === null && (mirror.counterparty ?? "").startsWith("book:")) {
+      const currency = body.currency ?? (mirror.currency as Currency);
+      const day = body.spentAt ?? mirror.spentAt;
+      await db
+        .update(schema.expenses)
+        .set({
+          amount: (body.amount ?? Number(mirror.amount)).toFixed(2),
+          currency,
+          spentAt: day,
+          rateToUsd: (await rateToUsd(currency, day)).toFixed(8),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.expenses.id, mirror.id));
+    }
+  }
+
+  if (moved && body.movedTo === undefined && expense.balanceEntryId !== null) {
+    const entry = await db.query.balanceEntries.findFirst({
+      where: eq(schema.balanceEntries.id, expense.balanceEntryId),
+    });
+    if (entry !== undefined) {
+      const sign = Number(entry.amount) < 0 ? -1 : 1;
+      await db
+        .update(schema.balanceEntries)
+        .set({
+          amount: ((body.amount ?? Number(expense.amount)) * sign).toFixed(2),
+          currency: body.currency ?? entry.currency,
+          happenedAt: body.spentAt ?? entry.happenedAt,
+        })
+        .where(eq(schema.balanceEntries.id, entry.id));
+    }
+  }
+
   // Перенос в свою же книгу — это две строки: уход здесь и приход там. Иначе
   // выручка, забранная из дела, в личной книге не появится вовсе. Встречная
   // строка помечается книгой, чтобы повторная правка переписывала её, а не
@@ -679,15 +738,8 @@ app.patch("/api/expenses/:id", async (request, reply) => {
       patch["counterparty"] = null;
     }
 
-    if (body.toBook !== null) {
-      const books = await ledgersOf(user.id);
-      const target = books.find((b) => b.id === body.toBook);
-
-      if (target === undefined || target.id === ledgerId) {
-        await reply.code(400).send({ error: "в эту книгу перенести нельзя" });
-        return;
-      }
-
+    const target = targetBook;
+    if (target !== undefined) {
       const outgoing = expense.incomeSource !== "Приход";
       const amount = body.amount ?? Number(expense.amount);
       const currency = (body.currency ?? expense.currency) as Currency;
@@ -750,11 +802,15 @@ app.delete("/api/expenses/:id", async (request, reply) => {
     return;
   }
 
-  await softDelete(id);
+  // Вместе со встречной строкой переноса и движением по балансу: иначе вторая
+  // книга и остаток продолжали считать уже удалённую операцию.
+  const removed = await removeExpense(expense);
 
   // Карточка этой траты в чате должна исчезнуть вместе с ней: иначе в боте
   // остаётся сообщение о трате, которой уже нет.
-  await removeCards(BOT_TOKEN, id).catch(() => undefined);
+  for (const removedId of removed) {
+    await removeCards(BOT_TOKEN, removedId).catch(() => undefined);
+  }
   await refreshPanel(BOT_TOKEN, request.user, request.ledgerId).catch(() => undefined);
 
   return { ok: true };

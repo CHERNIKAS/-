@@ -12,6 +12,9 @@ import { db, schema } from "./db.js";
  * валюты не трогает ни историю, ни эти запросы.
  */
 
+/** Условный slug для трат без категории: по нему же фильтруется список. */
+export const UNCATEGORIZED = "uncategorized";
+
 export type CategoryTotal = {
   slug: string;
   title: string;
@@ -59,6 +62,8 @@ export async function totalUsd(ledgerId: number, period: Period): Promise<number
 export async function byCategory(ledgerId: number, period: Period): Promise<CategoryTotal[]> {
   const totalExpr = sql<string>`coalesce(sum(${NET} * ${schema.expenses.rateToUsd}), 0)`;
 
+  // Левое соединение: траты без категории раньше выпадали из разбивки, и сумма
+  // категорий не сходилась с итогом.
   const rows = await db
     .select({
       slug: schema.categories.slug,
@@ -67,15 +72,15 @@ export async function byCategory(ledgerId: number, period: Period): Promise<Cate
       total: totalExpr,
     })
     .from(schema.expenses)
-    .innerJoin(schema.categories, eq(schema.categories.id, schema.expenses.categoryId))
+    .leftJoin(schema.categories, eq(schema.categories.id, schema.expenses.categoryId))
     .where(periodFilter(ledgerId, period))
     .groupBy(schema.categories.slug, schema.categories.title, schema.categories.emoji)
     .orderBy(desc(totalExpr));
 
   return rows.map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    emoji: r.emoji,
+    slug: r.slug ?? UNCATEGORIZED,
+    title: r.title ?? "Без категории",
+    emoji: r.emoji ?? "📦",
     totalUsd: Number(r.total),
   }));
 }

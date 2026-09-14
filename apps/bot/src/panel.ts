@@ -3,7 +3,6 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Api } from "grammy";
 import { db, schema } from "@costnote/core/data";
 import { escapeHtml, moneyShort } from "./format.js";
-import { totalSince } from "@costnote/core/data";
 import { localToday, panelTotals, rateToUsd } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 

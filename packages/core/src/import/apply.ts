@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isRealDate } from "../parse.js";
 import { CURRENCIES, type Currency, matchCurrency } from "../currencies.js";
 import type { Mapping } from "./detect.js";
 import type { Sheet } from "./read.js";
@@ -188,15 +189,25 @@ export function parseAmount(cell: string, decimal: "," | "."): number | null {
   const text = cell.replace(/\s| /g, "").trim();
   if (text === "") return null;
 
-  // Банки помечают расход и скобками, и суффиксом DR — оба означают минус.
-  const negative = /^\(.*\)$/.test(text) || /dr$/i.test(text) || text.startsWith("-");
+  // Типографский минус и тире банки ставят вместо дефиса: без замены знак
+  // терялся, и расход становился приходом.
+  const signed = text.replace(/[−–—]/g, "-");
+
+  // Банки помечают расход и скобками, и суффиксом DR, и минусом в конце — всё
+  // это означает минус.
+  const negative =
+    /^\(.*\)$/.test(signed) || /dr$/i.test(signed) || signed.startsWith("-") || signed.endsWith("-");
 
   const digits =
     decimal === ","
-      ? text.replace(/[^\d,-]/g, "").replace(/\./g, "").replace(",", ".")
-      : text.replace(/[^\d.-]/g, "").replace(/,/g, "");
+      ? signed.replace(/[^\d,-]/g, "").replace(/\./g, "").replace(",", ".")
+      : signed.replace(/[^\d.-]/g, "").replace(/,/g, "");
 
-  const value = Number.parseFloat(digits.replace(/-/g, ""));
+  const clean = digits.replace(/-/g, "");
+  // «1.2.3» — не число, а мусор: раньше из него получалось 1.2.
+  if (!/^\d+(\.\d+)?$/.test(clean)) return null;
+
+  const value = Number.parseFloat(clean);
   if (!Number.isFinite(value)) return null;
 
   return negative ? -value : value;
@@ -231,6 +242,9 @@ export function parseDate(cell: string, order: Mapping["dateOrder"], today: stri
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
   const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  // «31.02» база не примет: одна такая строка раньше роняла весь импорт.
+  if (!isRealDate(iso)) return null;
 
   // Дата из будущего означает, что порядок частей определён неверно.
   return iso > today ? null : iso;

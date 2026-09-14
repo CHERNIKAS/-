@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or } from "drizzle-orm";
 import type { Currency } from "../currencies.js";
 import { db, schema } from "./db.js";
 
@@ -90,4 +90,26 @@ export async function markCharged(id: number, day: string): Promise<void> {
     .update(schema.recurring)
     .set({ chargedMonth: `${day.slice(0, 7)}-01` })
     .where(eq(schema.recurring.id, id));
+}
+
+/**
+ * Забрать платёж на начисление в этом месяце.
+ *
+ * Отметка ставится до создания траты и только если её ещё нет: два
+ * наложившихся прохода расписания раньше оба видели платёж неначисленным и
+ * записывали его дважды.
+ */
+export async function claimRecurring(id: number, day: string): Promise<boolean> {
+  const monthStart = `${day.slice(0, 7)}-01`;
+  const rows = await db
+    .update(schema.recurring)
+    .set({ chargedMonth: monthStart })
+    .where(
+      and(
+        eq(schema.recurring.id, id),
+        or(isNull(schema.recurring.chargedMonth), lt(schema.recurring.chargedMonth, monthStart)),
+      ),
+    )
+    .returning({ id: schema.recurring.id });
+  return rows.length > 0;
 }

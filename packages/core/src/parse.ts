@@ -36,6 +36,19 @@ const MONTHS: Record<string, number> = {
 /** «5 сентября», «5 сен» */
 const DATE_WORD_RE = /(?<![\d])(\d{1,2})\s+([а-яё]{3,})/iu;
 
+/**
+ * Месяц словом: основа и короткое окончание, не длиннее «-ября».
+ *
+ * Без этого ограничения «такси 12 декабристов» читалось как 12 декабря.
+ */
+function monthOf(word: string): number | null {
+  const clean = word.toLowerCase();
+  const entry = Object.entries(MONTHS).find(
+    ([stem]) => clean.startsWith(stem) && clean.length - stem.length <= 3,
+  );
+  return entry === undefined ? null : entry[1];
+}
+
 /** «5/09», «05.09.2026», «5-9-26» — со слэшем или с годом, без догадок. */
 const DATE_NUM_RE =
   /(?<![\d.,])(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?(?![\d])/u;
@@ -120,14 +133,44 @@ function isDigit(ch: string): boolean {
   return ch >= "0" && ch <= "9";
 }
 
-/** 15 · 1000 · 1 000 · 4.50 · 4,50 · 1 000,50 */
-const AMOUNT_RE = /(?<![\d.,])\d+(?:[  ]\d{3})*(?:[.,]\d{1,2})?(?![\d])/u;
+/**
+ * 15 · 1000 · 1 000 · 1,000 · 1.000 · 4.50 · 4,50 · 1 000,50
+ *
+ * Разделитель тысяч — пробел, точка или запятая перед ровно тремя цифрами.
+ * «1,000 лир» раньше читалось как одна лира.
+ */
+const AMOUNT_RE =
+  /(?<![\d.,])(?:\d{1,3}(?:[  ]\d{3})+|\d{1,3}(?:,\d{3})+(?![\d.])|\d{1,3}(?:\.\d{3})+(?![\d,])|\d+)(?:[.,]\d{1,2})?(?![\d])/gu;
+
+/** Место, где стояла валюта: сумма рядом с ней и есть сумма траты. */
+const CURRENCY_MARK = "";
 
 const DATE_WORDS: Record<string, number> = {
   сегодня: 0,
   вчера: 1,
   позавчера: 2,
 };
+
+/** Сколько дней в месяце; без года февраль считается високосным. */
+export function daysInMonth(month: number, year: number | null): number {
+  if (month === 2) {
+    if (year === null) return 29;
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+/** Настоящая ли это дата: «2026-02-31» база не примет и уронит сохранение. */
+export function isRealDate(iso: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (match === null) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(month, year);
+}
 
 /**
  * Быстрый локальный разбор одного фрагмента.
@@ -175,29 +218,33 @@ export function parseEntry(raw: string): ParsedEntry {
   const worded = DATE_WORD_RE.exec(rest);
   if (worded !== null) {
     const [, day, monthWord] = worded as unknown as [string, string, string];
-    const clean = monthWord.toLowerCase();
-    const entry = Object.entries(MONTHS).find(([stem]) => clean.startsWith(stem));
+    const month = monthOf(monthWord);
 
-    if (entry !== undefined) {
-      dateHint = { day: Number(day), month: entry[1], year: null };
+    if (month !== null && Number(day) >= 1 && Number(day) <= daysInMonth(month, null)) {
+      dateHint = { day: Number(day), month, year: null };
       rest = rest.replace(worded[0], " ");
     }
   }
 
   if (dateHint === null) {
     const numeric = DATE_NUM_RE.exec(rest);
-    // Точка без года — это чаще копейки, чем дата: такую пару пропускаем.
     const written = numeric === null ? "" : numeric[0];
     const hasYear = numeric !== null && numeric[3] !== undefined;
 
-    if (numeric !== null && (written.includes("/") || written.includes("-") || hasYear)) {
+    // Точка без года — это чаще копейки, чем дата; дефис без года — чаще
+    // диапазон «12-15», чем число. Датой без года считается только слэш.
+    if (numeric !== null && (written.includes("/") || hasYear)) {
       const day = Number(numeric[1]);
       const month = Number(numeric[2]);
+      const year = hasYear ? Number(numeric[3]) : null;
+      const fullYear = year === null ? null : year < 100 ? 2000 + year : year;
 
-      if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-        dateHint = { day, month, year: hasYear ? Number(numeric[3]) : null };
-        rest = rest.replace(written, " ");
+      if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(month, fullYear)) {
+        dateHint = { day, month, year };
       }
+      // Даже несуществующая «31/02» — это дата, а не сумма: её цифры не должны
+      // стать суммой траты.
+      rest = rest.replace(written, " ");
     }
   }
 
@@ -215,7 +262,7 @@ export function parseEntry(raw: string): ParsedEntry {
   for (const symbol of CURRENCY_SYMBOLS) {
     if (rest.includes(symbol)) {
       currency = matchCurrency(symbol);
-      rest = rest.split(symbol).join(" ");
+      rest = rest.split(symbol).join(` ${CURRENCY_MARK} `);
       break;
     }
   }
@@ -226,19 +273,25 @@ export function parseEntry(raw: string): ParsedEntry {
       const re = word(alias);
       if (re.test(rest)) {
         currency = matchCurrency(alias);
-        rest = rest.replace(re, " ");
+        rest = rest.replace(re, ` ${CURRENCY_MARK} `);
         break;
       }
     }
   }
 
-  const amountMatch = AMOUNT_RE.exec(rest);
-  const amount = amountMatch ? normalizeAmount(amountMatch[0]) : null;
-  if (amountMatch) {
-    rest = rest.slice(0, amountMatch.index) + " " + rest.slice(amountMatch.index + amountMatch[0].length);
+  const match = pickAmount(rest);
+  const amount = match === null ? null : normalizeAmount(match.text);
+  if (match !== null) {
+    rest = `${rest.slice(0, match.index)} ${rest.slice(match.index + match.text.length)}`;
   }
 
-  const merchant = rest.replace(/\s+/gu, " ").trim();
+  const merchant = rest
+    .split(CURRENCY_MARK)
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    // Хвосты от вырезанного: «кафе -15» оставляло «кафе -».
+    .replace(/^[\s\-–—:]+|[\s\-–—:]+$/gu, "")
+    .trim();
 
   return {
     raw: trimmed,
@@ -255,9 +308,36 @@ export function parseEntry(raw: string): ParsedEntry {
   };
 }
 
+/**
+ * Какое из чисел в строке — сумма.
+ *
+ * Раньше бралось первое, и «айфон 15 1000$» стоил 15 долларов. Теперь
+ * главнее число рядом с валютой; если валюты нет — последнее: сумму пишут в
+ * конце, а числа в названии идут раньше — «бургер 2 шт 300», «такси 12
+ * декабристов 5».
+ */
+function pickAmount(text: string): { text: string; index: number } | null {
+  const found = [...text.matchAll(AMOUNT_RE)].map((m) => ({ text: m[0], index: m.index ?? 0 }));
+  if (found.length === 0) return null;
+  if (found.length === 1) return found[0] ?? null;
+
+  const near = found.filter((m) => {
+    const before = text.slice(0, m.index).trimEnd();
+    const after = text.slice(m.index + m.text.length).trimStart();
+    return before.endsWith(CURRENCY_MARK) || after.startsWith(CURRENCY_MARK);
+  });
+
+  const pool = near.length > 0 ? near : found;
+  return pool[pool.length - 1] ?? null;
+}
+
 function normalizeAmount(token: string): number {
-  const cleaned = token.replace(/[  ]/gu, "").replace(",", ".");
-  return Number.parseFloat(cleaned);
+  const compact = token.replace(/[  ]/gu, "");
+  // Последний разделитель с одной-двумя цифрами после — десятичный, остальные — тысячи.
+  const decimal = /[.,](\d{1,2})$/.exec(compact);
+  const whole = decimal === null ? compact : compact.slice(0, decimal.index);
+  const digits = whole.replace(/[.,]/g, "");
+  return Number.parseFloat(decimal === null ? digits : `${digits}.${decimal[1]}`);
 }
 
 /** Разбор целого сообщения: несколько трат одной строкой или в столбик. */
@@ -277,13 +357,20 @@ export function resolveSpentAt(entry: ParsedEntry, today: string): string {
   const { day, month } = entry.dateHint;
   const year = entry.dateHint.year ?? Number(today.slice(0, 4));
   const full = year < 100 ? 2000 + year : year;
-  const iso = `${full}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const iso = isoDay(full, month, day);
 
   if (entry.dateHint.year !== null) return iso > today ? shift(today, 0) : iso;
 
-  return iso > today
-    ? `${full - 1}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-    : iso;
+  return iso > today ? isoDay(full - 1, month, day) : iso;
+}
+
+/**
+ * Дата без выхода за конец месяца: «29 февраля» в невисокосный год
+ * становится 28-м, а не несуществующим днём, который уронит сохранение.
+ */
+function isoDay(year: number, month: number, day: number): string {
+  const safe = Math.min(day, daysInMonth(month, year));
+  return `${year}-${String(month).padStart(2, "0")}-${String(safe).padStart(2, "0")}`;
 }
 
 function shift(day: string, days: number): string {

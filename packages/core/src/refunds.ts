@@ -27,12 +27,25 @@ export function looksLikeTransfer(description: string): boolean {
  * там имя магазина, а дальше город и страна. Без этого возврат из Trendyol
  * «совпадал» с покупкой в Migros — общим у них было слово ISTANBUL.
  */
+function merchantWords(text: string): string[] {
+  return (text.split(",")[0] ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 4 && !NOISE.has(w));
+}
+
+/**
+ * Названо ли в строке хоть что-то, по чему узнаётся покупка.
+ *
+ * «возврат 15 лир» — без названия, верим сумме. «вернул долг 100» — названо, и
+ * если покупки «долг» нет, это не возврат покупки, а просто пришедшие деньги.
+ */
+export function hasMerchantWords(text: string): boolean {
+  return merchantWords(text).length > 0;
+}
+
 export function sameMerchant(left: string, right: string): boolean {
-  const words = (text: string): string[] =>
-    (text.split(",")[0] ?? "")
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((w) => w.length >= 4 && !NOISE.has(w));
+  const words = merchantWords;
 
   const first = new Set(words(left));
   if (first.size === 0) return false;

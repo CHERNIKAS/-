@@ -6,7 +6,7 @@ import { escapeHtml, moneyShort } from "../format.js";
 import { PERIOD_KEYS, PERIOD_TITLE, type PeriodKey, buildPeriod } from "@costnote/core";
 import { byCategory, byCurrency, expenseCount, incomeUsd, totalUsd } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";
-import { rateToUsd, today } from "@costnote/core/data";
+import { rateToUsd, } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
 /**

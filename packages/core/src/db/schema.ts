@@ -231,6 +231,14 @@ export const expenses = pgTable(
     /** Из какого импорта пришла трата — по нему же импорт откатывается целиком. */
     importId: integer("import_id"),
     /**
+     * Из какого сообщения в чате пришла трата.
+     *
+     * Правка сообщения переписывает ровно его траты: раньше связь угадывалась
+     * по времени карточек, и правка старого сообщения сносила всё, что внесено
+     * после него.
+     */
+    rawInputId: integer("raw_input_id"),
+    /**
      * Отпечаток строки выписки: дата, сумма и описание.
      *
      * Повторный импорт того же файла не задваивает траты, а пересечения с
@@ -476,6 +484,15 @@ export const oauthRequests = pgTable("oauth_requests", {
   redirectUri: text("redirect_uri").notNull(),
   state: text(),
   codeChallenge: varchar("code_challenge", { length: 128 }).notNull(),
+  /**
+   * Код со страницы входа, который человек вводит в боте.
+   *
+   * Без него подключение мог начать кто угодно и прислать ссылку на бота:
+   * нажатие «Подключить» отдало бы чужому Claude твои траты. Код видит только
+   * тот, кто открыл страницу.
+   */
+  confirmCode: varchar("confirm_code", { length: 8 }),
+  confirmAttempts: smallint("confirm_attempts").notNull().default(0),
   scope: varchar({ length: 64 }).notNull().default("read"),
   userId: integer("user_id"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
