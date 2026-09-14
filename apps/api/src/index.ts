@@ -65,6 +65,7 @@ import { and, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { z } from "zod";
 import { verifyInitData } from "./auth.js";
+import { registerMcp } from "./mcp.js";
 import {
   type CardData,
   cardText,
@@ -98,7 +99,8 @@ declare module "fastify" {
  * кем-то другим, даже если очень захочет.
  */
 app.addHook("preHandler", async (request, reply) => {
-  if (request.url === "/api/health") return;
+  // Коннектор Claude входит по своему токену, а не по подписи Telegram.
+  if (!request.url.startsWith("/api/") || request.url === "/api/health") return;
 
   const initData = request.headers["x-init-data"];
   const tgUser = verifyInitData(typeof initData === "string" ? initData : "", BOT_TOKEN);
@@ -114,6 +116,8 @@ app.addHook("preHandler", async (request, reply) => {
 });
 
 app.get("/api/health", async () => ({ ok: true }));
+
+await registerMcp(app, BOT_USERNAME);
 
 function shiftDay(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00Z`);

@@ -449,3 +449,62 @@ export const balanceEntries = pgTable(
   },
   (t) => [index("balance_ledger_idx").on(t.ledgerId, t.place)],
 );
+
+/**
+ * Приложения, которым человек разрешил смотреть в свои траты, — пока это Claude.
+ *
+ * Клиент регистрируется сам (так делает Claude), поэтому здесь только его
+ * адреса возврата: код входа уходит лишь туда, куда клиент заявил заранее.
+ */
+export const oauthClients = pgTable("oauth_clients", {
+  id: varchar({ length: 64 }).primaryKey(),
+  name: varchar({ length: 128 }),
+  /** Адреса возврата JSON-массивом. */
+  redirectUris: text("redirect_uris").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Запрос на подключение, ожидающий ответа в Telegram.
+ *
+ * Человек подтверждает кнопкой в боте, а не паролем: пароля у нас нет, а бот
+ * уже знает, кто он. Код выдаётся только после подтверждения и только хешем.
+ */
+export const oauthRequests = pgTable("oauth_requests", {
+  id: varchar({ length: 64 }).primaryKey(),
+  clientId: varchar("client_id", { length: 64 }).notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  state: text(),
+  codeChallenge: varchar("code_challenge", { length: 128 }).notNull(),
+  scope: varchar({ length: 64 }).notNull().default("read"),
+  userId: integer("user_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  deniedAt: timestamp("denied_at", { withTimezone: true }),
+  codeHash: varchar("code_hash", { length: 64 }),
+  codeUsedAt: timestamp("code_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Выданные доступы. Хранятся хешами: утечка базы не отдаёт готовых токенов. */
+export const oauthTokens = pgTable(
+  "oauth_tokens",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id").notNull(),
+    clientId: varchar("client_id", { length: 64 }).notNull(),
+    scope: varchar({ length: 64 }).notNull(),
+    accessHash: varchar("access_hash", { length: 64 }).notNull(),
+    refreshHash: varchar("refresh_hash", { length: 64 }).notNull(),
+    accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
+    refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("oauth_tokens_access_key").on(t.accessHash),
+    uniqueIndex("oauth_tokens_refresh_key").on(t.refreshHash),
+    index("oauth_tokens_user_idx").on(t.userId),
+  ],
+);

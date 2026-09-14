@@ -12,3 +12,4 @@ export * from "./imports.js";
 export * from "./balance.js";
 export * from "./clock.js";
 export * from "./panel.js";
+export * from "./oauth.js";

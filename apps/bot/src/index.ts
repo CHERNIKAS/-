@@ -17,6 +17,9 @@ import { listCategories, totalSince } from "@costnote/core/data";
 import { rateToUsd, refreshRates, today } from "@costnote/core/data";
 import {
   createSharedLedger,
+  decideAuthRequest,
+  liveAuthRequest,
+  revokeAllTokens,
   ensureUser,
   joinLedger,
   ledgerByToken,
@@ -43,6 +46,32 @@ bot.command("start", async (ctx) => {
   // Ссылка-приглашение приходит как /start join_<токен>: это штатный способ
   // Telegram передать данные при первом входе.
   const payload = ctx.match;
+
+  // Подключение Claude: страница входа отправила сюда, решение — кнопкой.
+  if (typeof payload === "string" && payload.startsWith("mcp_")) {
+    const found = await liveAuthRequest(payload.slice(4));
+    if (found === undefined || found.approvedAt !== null || found.deniedAt !== null) {
+      await ctx.reply("Ссылка устарела — начни подключение в Claude заново.");
+      return;
+    }
+    await ctx.reply(
+      [
+        "<b>Подключить Claude?</b>",
+        "",
+        "Claude сможет смотреть твои траты, доходы и итоги по всем книгам. Менять ничего не сможет.",
+        "",
+        "<i>Отключить в любой момент: /claude_off</i>",
+      ].join(NL),
+      {
+        parse_mode: "HTML",
+        reply_markup: new InlineKeyboard()
+          .text("Подключить", `mcp:ok:${found.id}`)
+          .text("Отмена", `mcp:no:${found.id}`),
+      },
+    );
+    return;
+  }
+
   if (typeof payload === "string" && payload.startsWith("join_")) {
     const ledger = await ledgerByToken(payload.slice(5));
 
@@ -105,6 +134,28 @@ bot.command("start", async (ctx) => {
  * Переключатель один на бота и приложение: сменил здесь — сменилось и там.
  * Иначе получается ловушка, где пишешь в одну книгу, а смотришь другую.
  */
+bot.callbackQuery(/^mcp:(ok|no):(.+)$/, async (ctx) => {
+  const approve = ctx.match[1] === "ok";
+  const { user } = await ensureUser(ctx.from);
+  const done = await decideAuthRequest(ctx.match[2] ?? "", user.id, approve);
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(
+    !done
+      ? "Запрос уже обработан или устарел."
+      : approve
+        ? "Готово, Claude подключён. Вернись в браузер — вход завершится сам."
+        : "Отменено.",
+  );
+});
+
+bot.command("claude_off", async (ctx) => {
+  if (!ctx.from) return;
+  const { user } = await ensureUser(ctx.from);
+  const count = await revokeAllTokens(user.id);
+  await ctx.reply(count > 0 ? "Claude отключён: доступ больше не работает." : "Подключений не было.");
+});
+
 bot.command("book", async (ctx) => {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
