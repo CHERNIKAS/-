@@ -67,3 +67,21 @@ export function pairTolerance(amount: number): number {
 
 /** Сколько дней между уходом и приходом ещё считается одним переносом. */
 export const PAIR_WINDOW_DAYS = 3;
+
+/**
+ * Вид операций по названию листа или его заголовку.
+ *
+ * «Доходы», «Переводы», «Income» — приложение учёта уже разложило операции само,
+ * и угадывать заново по знаку суммы значит спорить с ним: на листе доходов суммы
+ * положительные, как и на листе расходов.
+ */
+export function sheetKind(title: string): OperationKind | null {
+  const clean = title.trim().toLowerCase();
+  if (clean === "") return null;
+
+  if (/доход|надходж|поступлен|income|revenue|gelir/u.test(clean)) return "income";
+  if (/перевод|переказ|transfer|virman/u.test(clean)) return "transfer";
+  if (/расход|витрат|трат|expense|spending|gider/u.test(clean)) return "expense";
+
+  return null;
+}

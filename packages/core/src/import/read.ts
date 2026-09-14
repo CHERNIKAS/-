@@ -11,9 +11,18 @@ import * as XLSX from "xlsx";
 export type Sheet = string[][];
 
 export type ReadResult = {
+  /** Первый лист — по нему модель определяет формат. */
   rows: Sheet;
   /** Как файл прочитан — попадает в предпросмотр, чтобы было видно источник. */
   format: "csv" | "xlsx" | "pdf";
+  /**
+   * Все листы книги Excel.
+   *
+   * Приложения учёта кладут расходы, доходы и переводы на разные листы одного
+   * файла. Читая только первый, мы молча теряли доходы: файл «разобрался», а
+   * зарплаты в нём как будто не было.
+   */
+  sheets?: { name: string; rows: Sheet }[];
 };
 
 export async function readStatement(file: Uint8Array, filename: string): Promise<ReadResult> {
@@ -21,7 +30,8 @@ export async function readStatement(file: Uint8Array, filename: string): Promise
 
   if (name.endsWith(".pdf")) return { rows: await readPdf(file), format: "pdf" };
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    return { rows: readExcel(file), format: "xlsx" };
+    const sheets = readExcel(file);
+    return { rows: sheets[0]?.rows ?? [], format: "xlsx", sheets };
   }
 
   return { rows: readCsv(new TextDecoder("utf-8").decode(file)), format: "csv" };
@@ -78,17 +88,19 @@ function splitCsvLine(line: string, delimiter: string): string[] {
   return cells;
 }
 
-function readExcel(file: Uint8Array): Sheet {
+function readExcel(file: Uint8Array): { name: string; rows: Sheet }[] {
   const book = XLSX.read(file, { type: "array", cellDates: false, raw: false });
-  const first = book.SheetNames[0];
-  if (first === undefined) return [];
 
-  const sheet = book.Sheets[first];
-  if (sheet === undefined) return [];
+  return book.SheetNames.flatMap((name) => {
+    const sheet = book.Sheets[name];
+    if (sheet === undefined) return [];
 
-  return XLSX.utils
-    .sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "", raw: false })
-    .map((row) => row.map((cell) => String(cell ?? "").trim()));
+    const rows = XLSX.utils
+      .sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "", raw: false })
+      .map((row) => row.map((cell) => String(cell ?? "").trim()));
+
+    return rows.length === 0 ? [] : [{ name, rows }];
+  });
 }
 
 /**

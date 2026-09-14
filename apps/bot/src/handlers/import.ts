@@ -1,5 +1,12 @@
 import { type Currency, ClassifyError, classifyBatch, cleanMerchant, findRule } from "@costnote/core";
-import { applyMapping, describesMerchants, detectMapping, readStatement } from "@costnote/core/import";
+import {
+  applyMapping,
+  describesMerchants,
+  detectMapping,
+  type ParseResult,
+  readStatement,
+  sheetKind,
+} from "@costnote/core/import";
 import {
   type AppUser,
   applyRefund,
@@ -64,7 +71,7 @@ export async function handleDocument(
     // именно по ним видно, какой формат бот не понял.
     const stored = await storeStatement(user.id, name, bytes);
 
-    const { rows, format } = await readStatement(bytes, name);
+    const { rows, format, sheets } = await readStatement(bytes, name);
 
     if (rows.length === 0) {
       await ctx.api.editMessageText(
@@ -91,7 +98,18 @@ export async function handleDocument(
       return;
     }
 
-    const parsed = applyMapping(rows.slice(0, MAX_ROWS), mapping, today());
+    // Листы одной книги Excel разбираются одной картой: у приложений учёта
+    // колонки на них одинаковые, а вид операции сказан названием листа.
+    const parsed = mergeParsed(
+      (sheets ?? [{ name: "", rows }]).map((sheet) =>
+        applyMapping(
+          sheet.rows.slice(0, MAX_ROWS),
+          mapping,
+          today(),
+          sheetKind(`${sheet.name} ${sheet.rows[0]?.[0] ?? ""}`),
+        ),
+      ),
+    );
 
     if (parsed.rows.length === 0) {
       await ctx.api.editMessageText(
@@ -146,7 +164,12 @@ export async function handleDocument(
       "",
       known.size > 0 ? `<i>${known.size} уже есть в базе — пропущу</i>` : "",
       // Переводы и приходы не траты, но и не мусор: их надо будет разобрать.
-      moving.length > 0 ? `<i>${moving.length} переводов и приходов — спрошу о них после</i>` : "",
+      fresh.filter((r) => r.kind === "income" && r.certain).length > 0
+        ? `<i>${fresh.filter((r) => r.kind === "income" && r.certain).length} доходов</i>`
+        : "",
+      moving.filter((r) => !(r.kind === "income" && r.certain)).length > 0
+        ? `<i>${moving.filter((r) => !(r.kind === "income" && r.certain)).length} переводов и приходов — спрошу о них после</i>`
+        : "",
       parsed.swaps > 0 ? `<i>${parsed.swaps} обменов внутри счёта — пропускаю</i>` : "",
       parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
@@ -271,8 +294,9 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
               : null,
         counterparty: row.counterparty.slice(0, 128) || null,
         // Перевод ждёт решения, пока не нашлась встречная половина: только
-        // человек знает, свои это деньги или чужие.
-        needsKindReview: row.kind !== "expense",
+        // человек знает, свои это деньги или чужие. Доход с листа «Доходы» не
+        // ждёт — файл уже сказал, что это доход.
+        needsKindReview: row.kind === "transfer" || (row.kind === "income" && !row.certain),
         importId: record.id,
         fingerprint: row.fingerprint,
       })
@@ -359,6 +383,18 @@ export async function cancelImportFlow(ctx: Context, importId: number): Promise<
   await cancelImport(importId);
   await ctx.editMessageText("<i>Импорт отменён</i>", { parse_mode: "HTML" });
   await ctx.answerCallbackQuery();
+}
+
+/** Результаты разбора нескольких листов — как будто это один файл. */
+function mergeParsed(parts: ParseResult[]): ParseResult {
+  return {
+    rows: parts.flatMap((p) => p.rows),
+    credits: parts.flatMap((p) => p.credits),
+    skipped: parts.reduce((sum, p) => sum + p.skipped, 0),
+    incomes: parts.reduce((sum, p) => sum + p.incomes, 0),
+    cancelled: parts.reduce((sum, p) => sum + p.cancelled, 0),
+    swaps: parts.reduce((sum, p) => sum + p.swaps, 0),
+  };
 }
 
 function escape(text: string): string {

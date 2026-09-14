@@ -24,6 +24,8 @@ export type ImportedRow = {
   incoming: boolean;
   /** Вторая сторона: адрес кошелька, отправитель, номер счёта. */
   counterparty: string;
+  /** Вид сказан самим файлом (лист «Доходы»), а не угадан — спрашивать незачем. */
+  certain: boolean;
 };
 
 export type ParseResult = {
@@ -46,7 +48,13 @@ export type ParseResult = {
   swaps: number;
 };
 
-export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): ParseResult {
+export function applyMapping(
+  sheet: Sheet,
+  mapping: Mapping,
+  today: string,
+  /** Вид, известный заранее: лист «Доходы» не нужно угадывать по знаку суммы. */
+  forcedKind: OperationKind | null = null,
+): ParseResult {
   const rows: ImportedRow[] = [];
   let skipped = 0;
   let incomes = 0;
@@ -109,14 +117,15 @@ export function applyMapping(sheet: Sheet, mapping: Mapping, today: string): Par
       currency: currency !== null && CURRENCIES.includes(currency) ? currency : null,
       description: description === "" ? counterparty : description,
       fingerprint: fingerprint(spentAt, amount, description === "" ? counterparty : description),
-      kind: classifyOperation(type === "" ? status : type, incoming),
-      incoming,
+      kind: forcedKind ?? classifyOperation(type === "" ? status : type, incoming),
+      incoming: forcedKind === "income" ? true : forcedKind === "expense" ? false : incoming,
+      certain: forcedKind !== null,
       counterparty,
     };
 
     rows.push(row);
 
-    if (incoming) {
+    if (row.incoming) {
       incomes++;
       credits.push(row);
     }
