@@ -244,6 +244,21 @@ export const api = {
   deleteRule: (id: number) => request<{ ok: true }>(`/rules/${id}`, { method: "DELETE" }),
 
   /** Эмодзи не передаём: сервер подбирает его по названию той же таблицей, что и значок. */
+  imports: () =>
+    request<{
+      imports: {
+        id: number;
+        filename: string;
+        createdAt: string;
+        expenses: number;
+        incomes: number;
+        transfers: number;
+        total: number;
+      }[];
+    }>("/imports"),
+
+  removeImport: (id: number) => request<{ removed: number }>(`/imports/${id}`, { method: "DELETE" }),
+
   balance: () => request<BalanceState>("/balance"),
 
   addBalance: (payload: {

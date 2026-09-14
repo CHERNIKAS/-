@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { ImportedRow } from "../import/apply.js";
 import type { Mapping } from "../import/detect.js";
 import { db, schema } from "./db.js";
@@ -126,6 +126,80 @@ export async function undoImport(id: number): Promise<number> {
     })
     .where(eq(schema.expenses.refundImportId, id));
 
+  // Переносы из других выписок могли свестись в пару с удалёнными строками.
+  // Без второй половины это снова непонятные деньги — возвращаем их в разбор.
+  const removed = affected.map((row) => row.id);
+  if (removed.length > 0) {
+    await db
+      .update(schema.expenses)
+      .set({ pairedWithId: null, needsKindReview: true })
+      .where(
+        and(
+          inArray(schema.expenses.pairedWithId, removed),
+          isNull(schema.expenses.deletedAt),
+        ),
+      );
+  }
+
   await cancelImport(id);
   return affected.length;
+}
+
+export type ImportSummary = {
+  id: number;
+  filename: string;
+  createdAt: Date;
+  /** Сколько живых операций принёс файл, по видам. */
+  expenses: number;
+  incomes: number;
+  transfers: number;
+  total: number;
+};
+
+/**
+ * Применённые выписки книги.
+ *
+ * Считаются живые строки, а не число при импорте: часть операций человек мог
+ * удалить руками, и список должен показывать то, что реально уйдёт при удалении.
+ */
+export async function listImports(ledgerId: number): Promise<ImportSummary[]> {
+  const records = await db.query.imports.findMany({
+    where: and(eq(schema.imports.ledgerId, ledgerId), eq(schema.imports.status, "applied")),
+    orderBy: desc(schema.imports.createdAt),
+  });
+
+  if (records.length === 0) return [];
+
+  const counts = await db
+    .select({
+      importId: schema.expenses.importId,
+      kind: schema.expenses.kind,
+      count: sql<string>`count(*)`,
+    })
+    .from(schema.expenses)
+    .where(
+      and(
+        inArray(
+          schema.expenses.importId,
+          records.map((r) => r.id),
+        ),
+        isNull(schema.expenses.deletedAt),
+      ),
+    )
+    .groupBy(schema.expenses.importId, schema.expenses.kind);
+
+  return records.map((record) => {
+    const own = counts.filter((c) => c.importId === record.id);
+    const of = (kind: string) => Number(own.find((c) => c.kind === kind)?.count ?? 0);
+
+    return {
+      id: record.id,
+      filename: record.filename,
+      createdAt: record.createdAt,
+      expenses: of("expense"),
+      incomes: of("income"),
+      transfers: of("transfer"),
+      total: of("expense") + of("income") + of("transfer"),
+    };
+  });
 }

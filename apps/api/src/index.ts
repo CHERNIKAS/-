@@ -28,6 +28,9 @@ import {
   activeLedgerId,
   createRecurring,
   addBalanceEntry,
+  importById,
+  listImports,
+  undoImport,
   balanceByPlace,
   createLedger,
   recentBalanceEntries,
@@ -969,6 +972,40 @@ app.delete("/api/balance/:id", async (request) => {
   const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
   await removeBalanceEntry(request.ledgerId, id);
   return { ok: true };
+});
+
+/**
+ * Загруженные выписки.
+ *
+ * Отменить импорт можно было только кнопкой под сообщением в чате, а оно тонет
+ * за день. Здесь список всех применённых файлов книги, и любой удаляется целиком
+ * вместе со своими операциями.
+ */
+app.get("/api/imports", async (request) => {
+  const imports = await listImports(request.ledgerId);
+
+  return {
+    imports: imports.map((i) => ({
+      ...i,
+      createdAt: i.createdAt.toISOString().slice(0, 10),
+    })),
+  };
+});
+
+app.delete("/api/imports/:id", async (request, reply) => {
+  const { id } = z.object({ id: z.coerce.number() }).parse(request.params);
+  const record = await importById(id);
+
+  // Чужую выписку не удалить подбором номера: проверяем книгу.
+  if (!record || record.ledgerId !== request.ledgerId || record.status !== "applied") {
+    await reply.code(404).send({ error: "выписка не найдена" });
+    return;
+  }
+
+  const removed = await undoImport(id);
+  await refreshPanel(BOT_TOKEN, request.user, request.ledgerId).catch(() => undefined);
+
+  return { removed };
 });
 
 const settingsSchema = z.object({

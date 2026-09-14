@@ -10,6 +10,7 @@ import { Balance } from "./screens/Balance.js";
 import { Categories } from "./screens/Categories.js";
 import { History } from "./screens/History.js";
 import { Home } from "./screens/Home.js";
+import { Imports } from "./screens/Imports.js";
 import { Recurring } from "./screens/Recurring.js";
 import { Review } from "./screens/Review.js";
 import { Settings } from "./screens/Settings.js";
@@ -22,7 +23,7 @@ import { useSheetDrag } from "./useSheetDrag.js";
 
 type Tab = "home" | "stats" | "history" | "settings";
 
-type Section = "settings" | "categories" | "recurring" | "shared" | "balance" | "review";
+type Section = "settings" | "categories" | "recurring" | "shared" | "balance" | "imports" | "review";
 
 /**
  * Разделы «Ещё».
@@ -35,6 +36,7 @@ const SECTIONS: { key: Section; title: string; hint: string }[] = [
   { key: "categories", title: "Категории", hint: "категории расходов и источники дохода" },
   { key: "balance", title: "Баланс", hint: "сколько денег есть сейчас" },
   { key: "recurring", title: "Регулярные", hint: "подписки и платежи, которые повторяются" },
+  { key: "imports", title: "Выписки", hint: "загруженные файлы — удалить целиком" },
   { key: "shared", title: "Общий бюджет", hint: "книга на несколько человек" },
   { key: "review", title: "Разбор", hint: "приходы и переводы, ждущие ответа" },
 ];
@@ -252,6 +254,7 @@ export function App() {
           )}
 
           {more === "settings" && <Settings state={state} onChanged={() => void reload()} />}
+          {more === "imports" && <Imports onChanged={() => void reload()} />}
           {more === "balance" && (
             <Balance currency={state.user.currency} today={state.today} />
           )}
