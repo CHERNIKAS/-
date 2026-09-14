@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db.js";
 import { guessIcon } from "../icons.js";
@@ -109,4 +110,15 @@ export async function createCategoryFromSuggestion(
     });
 
   return { id: created.id, title: created.title };
+}
+
+/**
+ * Короткий ключ предложения для кнопки.
+ *
+ * В кнопку раньше клалось само название, закодированное и обрезанное до 50
+ * знаков: русское название длиннее восьми букв рвалось посреди кода, и кнопка
+ * падала на раскодировании. Ключ всегда короткий, а название находится заново.
+ */
+export function suggestionKey(merchant: string): string {
+  return createHash("sha1").update(merchant.toLowerCase()).digest("hex").slice(0, 16);
 }

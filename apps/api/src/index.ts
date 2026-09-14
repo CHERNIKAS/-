@@ -335,7 +335,9 @@ app.get("/api/expenses", async (request) => {
       to: isoDay.optional(),
       category: z.string().optional(),
       payment: z.enum(["card", "cash", "transfer"]).optional(),
-      limit: z.coerce.number().max(200).default(100),
+      // Приложение просит период целиком: с потолком в сотню месяц с импортом
+      // обрезался, и часть операций просто не показывалась.
+      limit: z.coerce.number().int().min(1).max(5000).default(5000),
     })
     .parse(request.query);
 
@@ -956,16 +958,28 @@ app.patch("/api/review", async (request) => {
   const { decisions } = reviewSchema.parse(request.body);
 
   for (const decision of decisions) {
+    const row = await expenseById(decision.id);
+    if (row === undefined || row.ledgerId !== ledgerId) continue;
+
+    // Перевод хранит направление в источнике: «Приход» или «Отправка». Раньше
+    // решение «мои деньги» его стирало, и знак в балансе и сведение пар ломались.
+    const direction =
+      row.incomeSource === "Приход" || row.incomeSource === "Отправка"
+        ? row.incomeSource
+        : row.kind === "income"
+          ? "Приход"
+          : "Отправка";
+
     await db
       .update(schema.expenses)
       .set({
         kind: decision.kind,
         needsKindReview: false,
         // Доход без источника выглядел бы недоразобранной строкой.
-        incomeSource: decision.kind === "income" ? "Поступления" : null,
+        incomeSource: decision.kind === "income" ? "Поступления" : decision.kind === "transfer" ? direction : null,
         updatedAt: new Date(),
       })
-      .where(and(eq(schema.expenses.id, decision.id), eq(schema.expenses.ledgerId, ledgerId)));
+      .where(eq(schema.expenses.id, row.id));
   }
 
   return { ok: true };
@@ -982,7 +996,8 @@ app.get("/api/books", async (request) => {
   const { user } = request;
   const books = await ledgersOf(user.id);
   const personal = books.find((b) => b.kind === "personal" && b.ownerId === user.id);
-  const activeId = user.activeLedgerId ?? personal?.id ?? null;
+  // Проверенная активная книга: после выхода из общей в поле остаётся её id.
+  const activeId = await activeLedgerId(user).catch(() => personal?.id ?? null);
 
   return {
     limit: MAX_LEDGERS,
@@ -1091,7 +1106,7 @@ const balanceSchema = z.object({
   amount: z.number().refine((v) => v !== 0, "движение на ноль ничего не меняет"),
   currency: z.enum(CURRENCIES),
   note: z.string().max(128).optional(),
-  happenedAt: z.string().optional(),
+  happenedAt: isoDay.optional(),
 });
 
 app.post("/api/balance", async (request) => {
@@ -1210,12 +1225,14 @@ app.get("/api/categories", async (request) => {
     .select({
       categoryId: schema.expenses.categoryId,
       count: sql<string>`count(*)`,
-      total: sql<string>`coalesce(sum(${schema.expenses.amount} * ${schema.expenses.rateToUsd}), 0)`,
+      // За вычетом возвратов и только расходы — те же цифры, что в аналитике.
+      total: sql<string>`coalesce(sum((${schema.expenses.amount} - ${schema.expenses.refundedAmount}) * ${schema.expenses.rateToUsd}), 0)`,
     })
     .from(schema.expenses)
     .where(
       and(
         eq(schema.expenses.ledgerId, ledgerId),
+        eq(schema.expenses.kind, "expense"),
         gte(schema.expenses.spentAt, from),
         isNull(schema.expenses.deletedAt),
       ),
@@ -1397,7 +1414,7 @@ app.post("/api/categories", async (request, reply) => {
 app.post("/api/export", async (request, reply) => {
   const { user, ledgerId } = request;
   const query = z
-    .object({ from: z.string().optional(), to: z.string().optional() })
+    .object({ from: isoDay.optional(), to: isoDay.optional() })
     .parse(request.body ?? {});
 
   const todayDay = localToday(request.user.timezone);
@@ -1415,17 +1432,21 @@ app.post("/api/export", async (request, reply) => {
     orderBy: [schema.expenses.spentAt, schema.expenses.id],
   });
 
-  const header = ["дата", "сумма", "валюта", "курс к USD", "в USD", "категория", "место", "заметка"];
+  // Вид операции обязателен: без него доходы и переводы в файле выглядели
+  // тратами. Суммы — за вычетом возвратов, как в отчётах.
+  const header = ["дата", "вид", "сумма", "валюта", "курс к USD", "в USD", "категория", "место", "заметка"];
+  const kinds: Record<string, string> = { expense: "расход", income: "доход", transfer: "перевод" };
   const lines = [header.join(";")];
 
   for (const row of rows) {
     const category = categories.find((c) => c.id === row.categoryId);
-    const amount = Number(row.amount);
+    const amount = Number(row.amount) - Number(row.refundedAmount);
     const rate = Number(row.rateToUsd);
 
     lines.push(
       [
         row.spentAt,
+        kinds[row.kind] ?? row.kind,
         amount.toFixed(2).replace(".", ","),
         row.currency,
         rate.toFixed(6).replace(".", ","),

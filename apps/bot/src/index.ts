@@ -1,7 +1,7 @@
 import type { Currency } from "@costnote/core";
 import { Bot, type CommandContext, type Context, InlineKeyboard } from "grammy";
 import { env } from "./env.js";
-import { moneyShort } from "./format.js";
+import { escapeHtml, moneyShort } from "./format.js";
 import { sendAnalytics, switchPeriod } from "./handlers/analytics.js";
 import { handleSettingsCallback, settingsKeyboard, settingsText } from "./handlers/settings.js";
 import { handleCallback } from "./handlers/callbacks.js";
@@ -10,7 +10,7 @@ import { applyImport, cancelImportFlow, handleDocument } from "./handlers/import
 import { mainKeyboard } from "./keyboards.js";
 import { refreshPanel } from "./panel.js";
 import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
-import { createCategoryFromSuggestion } from "@costnote/core/data";
+import { createCategoryFromSuggestion, pendingSuggestions, suggestionKey } from "@costnote/core/data";
 import { localToday } from "@costnote/core/data";
 import { startScheduler } from "./scheduler.js";
 import { totalSince } from "@costnote/core/data";
@@ -87,7 +87,7 @@ bot.command("start", async (ctx) => {
 
       await ctx.reply(
         [
-          `Ты в общей книге «${ledger.title}».`,
+          `Ты в общей книге «${escapeHtml(ledger.title)}».`,
           "",
           `Участников: ${members.length}. Траты теперь пишутся сюда.`,
           "",
@@ -192,7 +192,7 @@ bot.command("invite", async (ctx) => {
 
   await ctx.reply(
     [
-      `<b>${ledger.title}</b>`,
+      `<b>${escapeHtml(ledger.title)}</b>`,
       `участников: ${members.length}`,
       "",
       "Перешли эту ссылку тому, с кем ведёшь общий бюджет:",
@@ -321,7 +321,7 @@ bot.on("callback_query:data", async (ctx) => {
     await updateUser(user.id, { activeLedgerId: target.id === personal?.id ? null : target.id });
 
     const title = target.kind === "personal" ? "Личное" : target.title;
-    await ctx.editMessageText(`<b>Пишу в «${title}»</b>`, { parse_mode: "HTML" });
+    await ctx.editMessageText(`<b>Пишу в «${escapeHtml(title)}»</b>`, { parse_mode: "HTML" });
     await ctx.answerCallbackQuery();
     return;
   }
@@ -357,11 +357,15 @@ bot.on("callback_query:data", async (ctx) => {
     const [, action, raw] = data.split(":");
 
     if (action === "add" && raw) {
-      const merchant = decodeURIComponent(raw);
-      const created = await createCategoryFromSuggestion(ledgerId, user.id, merchant);
+      // Название ищется заново по короткому ключу: в кнопку оно не помещается.
+      const since = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+      const found = (await pendingSuggestions(ledgerId, since, 50)).find((s) => suggestionKey(s.merchant) === raw);
+      const merchant = found?.merchant ?? legacyMerchant(raw);
+      const created =
+        merchant === null ? null : await createCategoryFromSuggestion(ledgerId, user.id, merchant);
       await ctx.editMessageText(
         created
-          ? `<i>Категория «${created.title}» заведена, траты перенесены</i>`
+          ? `<i>Категория «${escapeHtml(created.title)}» заведена, траты перенесены</i>`
           : "<i>Не получилось завести категорию</i>",
         { parse_mode: "HTML" },
       );
@@ -456,3 +460,12 @@ async function main() {
 }
 
 void main();
+
+/** Кнопки, отправленные до перехода на ключи: там закодированное название. */
+function legacyMerchant(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}

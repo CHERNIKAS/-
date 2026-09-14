@@ -105,6 +105,21 @@ export async function cancelImport(id: number): Promise<void> {
     .where(eq(schema.imports.id, id));
 }
 
+/**
+ * Захват импорта на применение.
+ *
+ * Статус меняется одним условным запросом: двойное нажатие «Импортировать»
+ * раньше запускало применение дважды, и все операции файла записывались два раза.
+ */
+export async function claimImport(id: number, userId: number): Promise<ImportRecord | undefined> {
+  const [row] = await db
+    .update(schema.imports)
+    .set({ status: "applied", appliedAt: new Date() })
+    .where(and(eq(schema.imports.id, id), eq(schema.imports.userId, userId), eq(schema.imports.status, "preview")))
+    .returning();
+  return row;
+}
+
 /** Откат: траты импорта помечаются удалёнными, сам импорт — отменённым. */
 export async function undoImport(id: number): Promise<number> {
   const affected = await db
@@ -129,6 +144,28 @@ export async function undoImport(id: number): Promise<number> {
   // Переносы из других выписок могли свестись в пару с удалёнными строками.
   // Без второй половины это снова непонятные деньги — возвращаем их в разбор.
   const removed = affected.map((row) => row.id);
+
+  // Хвосты удалённых строк: движения по балансу и встречные половины переносов
+  // в свои книги. Без этого остаток и вторая книга считали уже отменённое.
+  if (removed.length > 0) {
+    const gone = await db.query.expenses.findMany({ where: inArray(schema.expenses.id, removed) });
+    const entries = gone.map((row) => row.balanceEntryId).filter((v): v is number => v !== null);
+    if (entries.length > 0) {
+      await db.delete(schema.balanceEntries).where(inArray(schema.balanceEntries.id, entries));
+    }
+
+    await db
+      .update(schema.expenses)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          inArray(schema.expenses.pairedWithId, removed),
+          isNull(schema.expenses.deletedAt),
+          sql`${schema.expenses.counterparty} like 'book:%'`,
+        ),
+      );
+  }
+
   if (removed.length > 0) {
     await db
       .update(schema.expenses)

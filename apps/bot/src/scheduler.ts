@@ -4,7 +4,7 @@ import type { Api, Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { activeLedgerId, db, schema } from "@costnote/core/data";
 import { env } from "./env.js";
-import { moneyShort } from "./format.js";
+import { escapeHtml, moneyShort } from "./format.js";
 import { rateToUsd, refreshRates } from "@costnote/core/data";
 import {
   byCategory,
@@ -17,6 +17,7 @@ import {
   ledgersOf,
   claimRecurring,
   pendingSuggestions,
+  suggestionKey,
   totalUsd,
 } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
@@ -193,7 +194,7 @@ async function runCleanup(api: Api, users: AppUser[], now: Date): Promise<void> 
     const lines = [`<i>Итог дня</i>`, `<code>${moneyShort(total / rate, base)}</code>`];
     if (books.filter((b) => b.usd > 0).length > 1) {
       for (const book of books.filter((b) => b.usd > 0)) {
-        lines.push(`<i>${book.title}</i> <code>${moneyShort(book.usd / rate, base)}</code>`);
+        lines.push(`<i>${escapeHtml(book.title)}</i> <code>${moneyShort(book.usd / rate, base)}</code>`);
       }
     }
 
@@ -236,9 +237,9 @@ async function runSuggestions(api: Api, users: AppUser[], now: Date): Promise<vo
 
     for (const s of suggestions) {
       lines.push(
-        `<b>${s.merchant}</b> — ${s.count} трат, <code>${moneyShort(s.totalUsd / rate, base)}</code>`,
+        `<b>${escapeHtml(s.merchant)}</b> — ${s.count} трат, <code>${moneyShort(s.totalUsd / rate, base)}</code>`,
       );
-      kb.text(`Завести «${s.merchant}»`, `g:add:${encodeURIComponent(s.merchant).slice(0, 50)}`).row();
+      kb.text(`Завести «${s.merchant.slice(0, 40)}»`, `g:add:${suggestionKey(s.merchant)}`).row();
     }
 
     lines.push("", "<i>Завести под них отдельные категории?</i>");
@@ -293,7 +294,7 @@ async function runRecurring(api: Api, users: AppUser[], now: Date): Promise<void
             user.tgId,
             // Книга в подписи: один и тот же платёж, заведённый в двух книгах,
             // иначе выглядит как два одинаковых сообщения без объяснения.
-            `<i>Регулярный платёж${book.kind === "personal" ? "" : ` · ${book.title}`}</i>${NL}<code>${moneyShort(amount, item.currency as Currency)}</code> · ${item.title}`,
+            `<i>Регулярный платёж${book.kind === "personal" ? "" : ` · ${escapeHtml(book.title)}`}</i>${NL}<code>${moneyShort(amount, item.currency as Currency)}</code> · ${escapeHtml(item.title)}`,
             { parse_mode: "HTML" },
           )
           .catch(() => undefined);
@@ -344,7 +345,7 @@ async function runWeekly(api: Api, users: AppUser[], now: Date): Promise<void> {
     ];
 
     if (top !== undefined) {
-      lines.push(`больше всего — ${top.title}, ${moneyShort(top.totalUsd / rate, base)}`);
+      lines.push(`больше всего — ${escapeHtml(top.title)}, ${moneyShort(top.totalUsd / rate, base)}`);
     }
 
     if (before > 0) {
@@ -420,7 +421,7 @@ async function runRetry(api: Api, users: AppUser[]): Promise<void> {
           if (category === undefined) continue;
 
           await setCategory(expense.id, category.id);
-          fixed.push(`${merchant === "" ? "трата" : merchant} → ${category.title}`);
+          fixed.push(escapeHtml(`${merchant === "" ? "трата" : merchant} → ${category.title}`));
         } catch {
           // Ошибка одной траты не должна ронять весь проход.
         }
@@ -481,7 +482,7 @@ async function runDigest(api: Api, users: AppUser[], now: Date): Promise<void> {
       await api
         .sendMessage(
           user.tgId,
-          [`<i>Итоги ${current.month}</i>`, "", ...notes.map((n) => `· ${n}`)].join(NL),
+          [`<i>Итоги ${current.month}</i>`, "", ...notes.map((n) => `· ${escapeHtml(n)}`)].join(NL),
           { parse_mode: "HTML" },
         )
         .catch(() => undefined);

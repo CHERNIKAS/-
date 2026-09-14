@@ -19,11 +19,11 @@ import {
   findRefundTarget,
   importCredits,
   existingFingerprints,
-  importById,
   importRows,
   listCategories,
   markImportApplied,
   cancelImport,
+  claimImport,
   rateToUsd,
   schema,
   userRules,
@@ -32,7 +32,7 @@ import { localToday } from "@costnote/core/data";
 import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
 import { env } from "../env.js";
-import { moneyShort } from "../format.js";
+import { escapeHtml, moneyShort } from "../format.js";
 import { storeStatement } from "../statements.js";
 
 const NL = String.fromCharCode(10);
@@ -127,6 +127,19 @@ export async function handleDocument(
     );
     const fresh = parsed.rows.filter((r) => !known.has(r.fingerprint));
 
+    // Всё уже в базе: раньше здесь показывалось «undefined — undefined» и кнопка
+    // «Импортировать 0».
+    if (fresh.length === 0) {
+      await ctx.api.editMessageText(
+        status.chat.id,
+        status.message_id,
+        `Все ${parsed.rows.length} операций из этого файла уже есть в базе — нового ничего.`,
+      );
+      return;
+    }
+
+    const truncated = (sheets ?? [{ name: "", rows }]).some((sheet) => sheet.rows.length > MAX_ROWS);
+
     const record = await createImportPreview({
       userId: user.id,
       ledgerId,
@@ -174,6 +187,8 @@ export async function handleDocument(
       parsed.swaps > 0 ? `<i>${parsed.swaps} обменов внутри счёта — пропускаю</i>` : "",
       parsed.cancelled > 0 ? `<i>${parsed.cancelled} отменённых операций — не беру</i>` : "",
       parsed.skipped > 0 ? `<i>${parsed.skipped} строк не разобрал</i>` : "",
+      // Молча отрезанный хвост выглядел бы как пропавшие операции.
+      truncated ? `<i>в файле больше ${MAX_ROWS} строк на листе — взял первые ${MAX_ROWS}, остальное пришли отдельным файлом</i>` : "",
       // Про отсутствие названий честнее предупредить до импорта, а не после.
       describesMerchants(spending) ? "" : `<i>в файле нет названий операций — категории проставить не из чего</i>`,
     ].filter((line) => line !== "");
@@ -206,14 +221,18 @@ export async function handleDocument(
  * а фоновый воркер разберёт их сам и незаметно.
  */
 export async function applyImport(ctx: Context, user: AppUser, importId: number): Promise<void> {
-  const record = await importById(importId);
+  // Захват, а не проверка: второе нажатие получит «неактуален», а не второй импорт.
+  const record = await claimImport(importId, user.id);
 
-  if (!record || record.status !== "preview" || record.userId !== user.id) {
+  if (!record) {
     await ctx.answerCallbackQuery("Этот импорт уже неактуален");
     return;
   }
 
-  const rows = importRows(record);
+  // Тот же файл мог быть применён из другого предпросмотра, пока этот ждал нажатия.
+  const planned = importRows(record);
+  const already = await existingFingerprints(record.ledgerId, planned.map((r) => r.fingerprint));
+  const rows = planned.filter((r) => !already.has(r.fingerprint));
   const categories = await listCategories(record.ledgerId);
   const rules = await userRules(user.id);
   const fallback = categories.find((c) => c.slug === "other");

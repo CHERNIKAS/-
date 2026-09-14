@@ -156,14 +156,14 @@ export async function detectMapping(rows: Sheet, options: DetectOptions): Promis
       dateColumn: num(raw["dateColumn"], 0),
       amountColumn: num(raw["amountColumn"], 1),
       descriptionColumn: num(raw["descriptionColumn"], 2),
-      creditColumn: raw["creditColumn"] === null ? null : num(raw["creditColumn"], -1),
-      currencyColumn: raw["currencyColumn"] === null ? null : num(raw["currencyColumn"], -1),
-      statusColumn: raw["statusColumn"] === null ? null : num(raw["statusColumn"], -1),
-      typeColumn: raw["typeColumn"] === null ? null : num(raw["typeColumn"], -1),
+      creditColumn: (raw["creditColumn"] ?? null) === null ? null : num(raw["creditColumn"], -1),
+      currencyColumn: (raw["currencyColumn"] ?? null) === null ? null : num(raw["currencyColumn"], -1),
+      statusColumn: (raw["statusColumn"] ?? null) === null ? null : num(raw["statusColumn"], -1),
+      typeColumn: (raw["typeColumn"] ?? null) === null ? null : num(raw["typeColumn"], -1),
       // Модель то находит колонку с адресом, то нет, а от неё зависит, сможем
       // ли мы вообще спросить «чьи это деньги». Не нашла — ищем сами.
       counterpartyColumn:
-        raw["counterpartyColumn"] === null
+        (raw["counterpartyColumn"] ?? null) === null
           ? guessCounterpartyColumn(rows, skipRows)
           : num(raw["counterpartyColumn"], -1),
       okStatuses: Array.isArray(raw["okStatuses"])
