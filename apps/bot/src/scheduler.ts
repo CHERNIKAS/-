@@ -91,6 +91,27 @@ async function currentLedgerId(user: AppUser): Promise<number | null> {
 }
 
 /**
+ * Сколько потрачено за день в каждой книге человека.
+ *
+ * Вечерний вопрос и итог дня говорят о человеке, а не о книге: он мог писать в
+ * общий бюджет и в книгу дела вперемешку.
+ */
+async function spentByBook(
+  user: AppUser,
+  day: string,
+): Promise<{ title: string; usd: number }[]> {
+  const books = await ledgersOf(user.id);
+  const result: { title: string; usd: number }[] = [];
+
+  for (const book of books) {
+    const usd = await totalSince(book.id, day);
+    result.push({ title: book.kind === "personal" ? "Личное" : book.title, usd });
+  }
+
+  return result;
+}
+
+/**
  * Вечернее напоминание.
  *
  * Приходит, только если за день ничего не внесено: спрашивать «трат не было?»
@@ -105,10 +126,9 @@ async function runReminders(api: Api, users: AppUser[], now: Date): Promise<void
     if (user.lastReminderDay === day) continue;
     if (localHour(user.timezone, now) !== user.reminderHour) continue;
 
-    const ledgerId = await currentLedgerId(user);
-    if (ledgerId === null) continue;
-
-    const spentToday = await totalSince(ledgerId, day);
+    // Трата в любой книге — уже не «ноль»: спрашивать об этом человека, который
+    // сегодня писал в «чайную», значит врать ему.
+    const spentToday = (await spentByBook(user, day)).reduce((sum, b) => sum + b.usd, 0);
     await db
       .update(schema.users)
       .set({ lastReminderDay: day })
@@ -162,19 +182,22 @@ async function runCleanup(api: Api, users: AppUser[], now: Date): Promise<void> 
         .where(eq(schema.botMessages.id, card.id));
     }
 
-    const ledgerId = await currentLedgerId(user);
-    if (ledgerId === null) continue;
-
     const base = user.currency as Currency;
     const rate = await rateToUsd(base, yesterday);
-    const total = await totalSince(ledgerId, yesterday);
+    const books = await spentByBook(user, yesterday);
+    const total = books.reduce((sum, b) => sum + b.usd, 0);
+
+    // По всем книгам, а не по открытой: трата в «чайной» — тоже трата дня, и
+    // «итог $0» при ней выглядит как враньё.
+    const lines = [`<i>Итог дня</i>`, `<code>${moneyShort(total / rate, base)}</code>`];
+    if (books.filter((b) => b.usd > 0).length > 1) {
+      for (const book of books.filter((b) => b.usd > 0)) {
+        lines.push(`<i>${book.title}</i> <code>${moneyShort(book.usd / rate, base)}</code>`);
+      }
+    }
 
     await api
-      .sendMessage(
-        user.tgId,
-        `<i>Итог дня</i>\n<code>${moneyShort(total / rate, base)}</code>`,
-        { parse_mode: "HTML" },
-      )
+      .sendMessage(user.tgId, lines.join(String.fromCharCode(10)), { parse_mode: "HTML" })
       .catch(() => undefined);
   }
 }

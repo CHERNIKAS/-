@@ -7,6 +7,7 @@ import { expenseCard, incomeCard, refundCard } from "../format.js";
 import { cardKeyboard } from "../keyboards.js";
 import {
   categoryBySlug,
+  activeLedgerId,
   applyRefund,
   createExpense,
   ledgersOf,
@@ -251,7 +252,10 @@ export async function saveExpenses(
   }
 
   // Панель показывает итог дня, а он только что изменился.
-  await refreshPanel(ctx.api, user, ledgerId, chatId).catch(() => undefined);
+  // Закреп всегда про открытую книгу: запись с префиксом «чай:» уходит в дело,
+  // но панель не должна вдруг показать итог дела вместо своего.
+  const shownId = await activeLedgerId(user).catch(() => ledgerId);
+  await refreshPanel(ctx.api, user, shownId, chatId).catch(() => undefined);
 
   await notifyPartners(ctx, user, ledgerId, parsed.length).catch(() => undefined);
 }
