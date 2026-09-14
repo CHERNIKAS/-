@@ -5,6 +5,7 @@ import type { Context } from "grammy";
 import { escapeHtml, moneyShort } from "../format.js";
 import { PERIOD_KEYS, PERIOD_TITLE, type PeriodKey, buildPeriod } from "@costnote/core";
 import { byCategory, byCurrency, expenseCount, incomeUsd, totalUsd } from "@costnote/core/data";
+import { localToday } from "@costnote/core/data";
 import { rateToUsd, today } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
@@ -30,7 +31,7 @@ export function periodKeyboard(active: PeriodKey): InlineKeyboard {
 type Rendered = { png: Buffer; caption: string };
 
 async function render(user: AppUser, ledgerId: number, key: PeriodKey): Promise<Rendered> {
-  const todayDay = today();
+  const todayDay = localToday(user.timezone);
   const period = buildPeriod(key, todayDay);
   const base = user.currency as Currency;
   const baseRate = await rateToUsd(base, todayDay);

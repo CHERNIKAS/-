@@ -289,7 +289,9 @@ async function runRecurring(api: Api, users: AppUser[], now: Date): Promise<void
         await api
           .sendMessage(
             user.tgId,
-            `<i>Регулярный платёж</i>${NL}<code>${moneyShort(amount, item.currency as Currency)}</code> · ${item.title}`,
+            // Книга в подписи: один и тот же платёж, заведённый в двух книгах,
+            // иначе выглядит как два одинаковых сообщения без объяснения.
+            `<i>Регулярный платёж${book.kind === "personal" ? "" : ` · ${book.title}`}</i>${NL}<code>${moneyShort(amount, item.currency as Currency)}</code> · ${item.title}`,
             { parse_mode: "HTML" },
           )
           .catch(() => undefined);

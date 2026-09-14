@@ -10,3 +10,5 @@ export * from "./suggestions.js";
 export * from "./recurring.js";
 export * from "./imports.js";
 export * from "./balance.js";
+export * from "./clock.js";
+export * from "./panel.js";

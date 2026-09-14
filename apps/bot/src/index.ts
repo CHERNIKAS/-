@@ -11,6 +11,7 @@ import { mainKeyboard } from "./keyboards.js";
 import { refreshPanel } from "./panel.js";
 import { PERIOD_KEYS, type PeriodKey } from "@costnote/core";
 import { createCategoryFromSuggestion } from "@costnote/core/data";
+import { localToday } from "@costnote/core/data";
 import { startScheduler } from "./scheduler.js";
 import { listCategories, totalSince } from "@costnote/core/data";
 import { rateToUsd, refreshRates, today } from "@costnote/core/data";
@@ -190,11 +191,16 @@ bot.command("help", async (ctx) => {
   );
 });
 
-async function summary(ctx: CommandContext<Context>, fromDay: string, label: string) {
+async function summary(ctx: CommandContext<Context>, span: "day" | "month", label: string) {
   if (!ctx.from) return;
   const { user, ledgerId } = await ensureUser(ctx.from);
+
+  // День считается по поясу человека, а он известен только здесь: команда
+  // «/day» в час ночи должна показывать сегодняшний день, а не вчерашний.
+  const day = localToday(user.timezone);
+  const fromDay = span === "day" ? day : `${day.slice(0, 7)}-01`;
   const base = user.currency as Currency;
-  const rate = await rateToUsd(base, today());
+  const rate = await rateToUsd(base, day);
   const totalUsd = await totalSince(ledgerId, fromDay);
 
   await ctx.reply(`<i>${label}</i>\n<code>${moneyShort(totalUsd / rate, base)}</code>`, {
@@ -202,8 +208,8 @@ async function summary(ctx: CommandContext<Context>, fromDay: string, label: str
   });
 }
 
-bot.command("day", (ctx) => summary(ctx, today(), "Сегодня"));
-bot.command("month", (ctx) => summary(ctx, `${today().slice(0, 7)}-01`, "За месяц"));
+bot.command("day", (ctx) => summary(ctx, "day", "Сегодня"));
+bot.command("month", (ctx) => summary(ctx, "month", "За месяц"));
 
 bot.command("settings", async (ctx) => {
   if (!ctx.from) return;

@@ -1,5 +1,5 @@
 import type { Currency } from "@costnote/core";
-import { db, schema, rateToUsd, today, totalSince } from "@costnote/core/data";
+import { db, localToday, panelTotals, rateToUsd, schema } from "@costnote/core/data";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 /**
@@ -128,7 +128,7 @@ export async function sendPlain(token: string, chatId: string, text: string): Pr
  */
 export async function refreshPanel(
   token: string,
-  user: { id: number; currency: string; monthlyBudget: string | null },
+  user: { id: number; currency: string; monthlyBudget: string | null; timezone: string; activeLedgerId: number | null },
   ledgerId: number,
 ): Promise<void> {
   const panel = await db.query.botMessages.findFirst({
@@ -142,21 +142,37 @@ export async function refreshPanel(
 
   if (panel === undefined) return;
 
-  const todayDay = today();
+  const todayDay = localToday(user.timezone);
   const base = user.currency as Currency;
   const rate = await rateToUsd(base, todayDay);
 
-  const dayUsd = await totalSince(ledgerId, todayDay);
-  const monthUsd = await totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`);
+  // Все книги с тратами за месяц — тот же вид, что рисует бот.
+  const books = (await panelTotals(user.id, todayDay)).filter((b) => b.monthUsd > 0);
+  let lines: string[];
 
-  const lines = [
-    `<b>Сегодня</b>  <code>${money(dayUsd / rate, base)}</code>`,
-    `<i>месяц</i>  <code>${money(monthUsd / rate, base)}</code>`,
-  ];
+  if (books.length <= 1) {
+    const only = books[0];
+    lines = [
+      `<b>Сегодня</b>  <code>${money((only?.dayUsd ?? 0) / rate, base)}</code>`,
+      `<i>месяц</i>  <code>${money((only?.monthUsd ?? 0) / rate, base)}</code>`,
+    ];
+    if (only !== undefined && only.kind !== "personal") {
+      lines.push(`<i>книга</i>  <b>${escape(only.title)}</b>`);
+    }
+  } else {
+    const ordered = [...books].sort((a, b) => (a.id === ledgerId ? -1 : b.id === ledgerId ? 1 : 0));
+    lines = ordered.map(
+      (b) =>
+        `${b.id === ledgerId ? "<b>" : "<i>"}${escape(b.title)}${b.id === ledgerId ? "</b>" : "</i>"}  ` +
+        `<code>${money(b.dayUsd / rate, base)}</code> <i>сегодня</i> · ` +
+        `<code>${money(b.monthUsd / rate, base)}</code> <i>месяц</i>`,
+    );
+  }
 
   if (user.monthlyBudget !== null) {
     const budget = Number(user.monthlyBudget);
-    const left = budget - monthUsd / rate;
+    const spent = (books.find((b) => b.id === ledgerId)?.monthUsd ?? 0) / rate;
+    const left = budget - spent;
     lines.push(
       left >= 0
         ? `<i>осталось</i>  <code>${money(left, base)}</code>`

@@ -15,6 +15,7 @@ import {
   softDelete,
   totalSince,
 } from "@costnote/core/data";
+import { localToday } from "@costnote/core/data";
 import { rateToUsd, today } from "@costnote/core/data";
 import { learnRule } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
@@ -146,7 +147,7 @@ async function redrawCard(
   const categories = await listCategories(ledgerId);
   const category = categories.find((c) => c.id === expense.categoryId) ?? null;
 
-  const todayDay = today();
+  const todayDay = localToday(user.timezone);
   const base = user.currency as Currency;
   const baseRate = await rateToUsd(base, expense.spentAt);
   const dayTotalUsd = await totalSince(ledgerId, todayDay);

@@ -45,6 +45,8 @@ export type Expense = {
   netBase: number;
   /** Куда переехали деньги, если это перенос: наличка, карта, крипта. */
   movedTo: string | null;
+  /** Своя книга, в которую ушёл перенос: выручку дела забрал себе. */
+  toBook: number | null;
 };
 
 export type State = {

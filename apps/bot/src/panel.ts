@@ -4,7 +4,7 @@ import type { Api } from "grammy";
 import { db, schema } from "@costnote/core/data";
 import { escapeHtml, moneyShort } from "./format.js";
 import { totalSince } from "@costnote/core/data";
-import { ledgersOf, rateToUsd, today } from "@costnote/core/data";
+import { localToday, panelTotals, rateToUsd } from "@costnote/core/data";
 import type { AppUser } from "@costnote/core/data";
 
 /**
@@ -16,27 +16,54 @@ import type { AppUser } from "@costnote/core/data";
  * молча перестала бы работать.
  */
 
+/**
+ * Текст закрепа: все книги сразу, пустые не показываются.
+ *
+ * Закреп — взгляд на все деньги, а не на открытую книгу: трата в «чайной» не
+ * должна пропадать с глаз, пока открыт общий бюджет. Книга без трат за месяц
+ * строку не занимает — иначе закреп из трёх пустых книг превращается в шум.
+ */
 async function panelText(user: AppUser, ledgerId: number): Promise<string> {
-  const todayDay = today();
+  const todayDay = localToday(user.timezone);
   const base = user.currency as Currency;
   const rate = await rateToUsd(base, todayDay);
 
-  const dayUsd = await totalSince(ledgerId, todayDay);
-  const monthUsd = await totalSince(ledgerId, `${todayDay.slice(0, 7)}-01`);
+  const books = (await panelTotals(user.id, todayDay)).filter((b) => b.monthUsd > 0);
 
-  const lines = [
-    `<b>Сегодня</b>  <code>${moneyShort(dayUsd / rate, base)}</code>`,
-    `<i>месяц</i>  <code>${moneyShort(monthUsd / rate, base)}</code>`,
-  ];
-
-  // Какая книга открыта — самое важное в панели: без этого закупка для дела
-  // тихо ляжет в личные траты, и заметишь ты это через месяц.
-  const books = await ledgersOf(user.id);
-  const book = books.find((b) => b.id === ledgerId);
-  if (book !== undefined && book.kind !== "personal") {
-    lines.push(`<i>книга</i>  <b>${escapeHtml(book.title)}</b>`);
+  // Одна книга с тратами — прежний короткий вид, без подписи.
+  if (books.length <= 1) {
+    const only = books[0];
+    const lines = [
+      `<b>Сегодня</b>  <code>${moneyShort((only?.dayUsd ?? 0) / rate, base)}</code>`,
+      `<i>месяц</i>  <code>${moneyShort((only?.monthUsd ?? 0) / rate, base)}</code>`,
+    ];
+    if (only !== undefined && only.kind !== "personal") {
+      lines.push(`<i>книга</i>  <b>${escapeHtml(only.title)}</b>`);
+    }
+    return withBudget(lines, user, only?.monthUsd ?? 0, rate, base);
   }
 
+  // Несколько книг — строка на каждую, открытая первой и отмеченной.
+  const ordered = [...books].sort((a, b) => (a.id === ledgerId ? -1 : b.id === ledgerId ? 1 : 0));
+  const lines = ordered.map(
+    (b) =>
+      `${b.id === ledgerId ? "<b>" : "<i>"}${escapeHtml(b.title)}${b.id === ledgerId ? "</b>" : "</i>"}  ` +
+      `<code>${moneyShort(b.dayUsd / rate, base)}</code> <i>сегодня</i> · ` +
+      `<code>${moneyShort(b.monthUsd / rate, base)}</code> <i>месяц</i>`,
+  );
+
+  const active = books.find((b) => b.id === ledgerId);
+  return withBudget(lines, user, active?.monthUsd ?? 0, rate, base);
+}
+
+/** Бюджет — про открытую книгу: лимит ставится на жизнь, а не на дело. */
+function withBudget(
+  lines: string[],
+  user: AppUser,
+  monthUsd: number,
+  rate: number,
+  base: Currency,
+): string {
   if (user.monthlyBudget !== null) {
     const budget = Number(user.monthlyBudget);
     const left = budget - monthUsd / rate;
@@ -47,7 +74,7 @@ async function panelText(user: AppUser, ledgerId: number): Promise<string> {
     );
   }
 
-  return lines.join("\n");
+  return lines.join(String.fromCharCode(10));
 }
 
 async function currentPanel(userId: number) {

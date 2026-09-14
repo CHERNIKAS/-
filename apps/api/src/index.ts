@@ -28,6 +28,7 @@ import {
   activeLedgerId,
   createRecurring,
   addBalanceEntry,
+  localToday,
   importById,
   listImports,
   undoImport,
@@ -139,7 +140,7 @@ async function buildCard(
 ): Promise<CardData> {
   const categories = await listCategories(ledgerId);
   const category = categories.find((c) => c.id === expense.categoryId) ?? null;
-  const todayDay = today();
+  const todayDay = localToday(user.timezone);
   const base = user.currency as Currency;
   const baseRateNow = await rateToUsd(base, todayDay);
   const amount = Number(expense.amount);
@@ -179,7 +180,7 @@ function incomeSourcesOf(user: { incomeSources: string | null }): string[] {
 
 app.get("/api/state", async (request) => {
   const { user, ledgerId } = request;
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
   const rate = await baseRate(user, todayDay);
 
   const monthPeriod = {
@@ -291,6 +292,10 @@ function serialize(
     incomeSource: expense.incomeSource,
     /** Куда переехали деньги, если это перенос: наличка, карта, крипта. */
     movedTo: expense.balancePlace,
+    /** Своя книга, в которую ушёл перенос. */
+    toBook: (expense.counterparty ?? "").startsWith("book:")
+      ? Number((expense.counterparty ?? "").slice(5))
+      : null,
     // Сколько по этой покупке вернули: строка показывает это отдельно, а из
     // итогов сумма уже вычтена.
     refunded: Number(expense.refundedAmount),
@@ -312,7 +317,7 @@ app.get("/api/expenses", async (request) => {
     .parse(request.query);
 
   const { user, ledgerId } = request;
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
   const from = query.from ?? shiftDay(todayDay, 30);
   const to = query.to ?? todayDay;
 
@@ -359,7 +364,7 @@ const createSchema = z.object({
 app.post("/api/expenses", async (request, reply) => {
   const body = createSchema.parse(request.body);
   const { user, ledgerId } = request;
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
   const categories = await listCategories(ledgerId);
   const options = categories.map((c) => ({ slug: c.slug, title: c.title, hint: c.hint }));
 
@@ -557,6 +562,8 @@ const patchSchema = z.object({
   kind: z.enum(["expense", "income", "transfer"]).optional(),
   /** Куда переехали деньги: наличка, карта, крипта. Пусто — никуда. */
   movedTo: z.string().max(64).nullable().optional(),
+  /** В какую свою книгу ушли деньги: выручку дела забрал себе. Пусто — ни в какую. */
+  toBook: z.number().int().nullable().optional(),
 });
 
 app.get("/api/expenses/:id", async (request, reply) => {
@@ -569,7 +576,7 @@ app.get("/api/expenses/:id", async (request, reply) => {
   }
 
   const categories = await listCategories(request.ledgerId);
-  const rate = await baseRate(request.user, today());
+  const rate = await baseRate(request.user, localToday(request.user.timezone));
   return { expense: serialize(expense, categories, rate) };
 });
 
@@ -651,11 +658,72 @@ app.patch("/api/expenses/:id", async (request, reply) => {
     patch["rateToUsd"] = (await rateToUsd(currency, day)).toFixed(8);
   }
 
+  // Перенос в свою же книгу — это две строки: уход здесь и приход там. Иначе
+  // выручка, забранная из дела, в личной книге не появится вовсе. Встречная
+  // строка помечается книгой, чтобы повторная правка переписывала её, а не
+  // плодила новые — и никогда не трогала пару, пришедшую из выписки.
+  if (body.toBook !== undefined) {
+    const mirror =
+      expense.pairedWithId === null ? undefined : await expenseById(expense.pairedWithId);
+
+    if (mirror !== undefined && (mirror.counterparty ?? "").startsWith("book:")) {
+      await db
+        .update(schema.expenses)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.expenses.id, mirror.id));
+      patch["pairedWithId"] = null;
+      patch["counterparty"] = null;
+    }
+
+    if (body.toBook !== null) {
+      const books = await ledgersOf(user.id);
+      const target = books.find((b) => b.id === body.toBook);
+
+      if (target === undefined || target.id === ledgerId) {
+        await reply.code(400).send({ error: "в эту книгу перенести нельзя" });
+        return;
+      }
+
+      const outgoing = expense.incomeSource !== "Приход";
+      const amount = body.amount ?? Number(expense.amount);
+      const currency = (body.currency ?? expense.currency) as Currency;
+      const day = body.spentAt ?? expense.spentAt;
+
+      const created = await createExpense({
+        ledgerId: target.id,
+        userId: user.id,
+        categoryId: null,
+        amount,
+        currency,
+        rateToUsd: await rateToUsd(currency, day),
+        spentAt: day,
+        merchant: expense.merchant ?? "",
+        confidence: null,
+        needsReview: false,
+        kind: "transfer",
+        // Направление зеркальное: ушло отсюда — пришло туда.
+        incomeSource: outgoing ? "Приход" : "Отправка",
+        counterparty: `book:${ledgerId}`,
+      });
+
+      await db
+        .update(schema.expenses)
+        .set({ pairedWithId: id, source: "app" })
+        .where(eq(schema.expenses.id, created.id));
+
+      patch["kind"] = "transfer";
+      patch["needsKindReview"] = false;
+      patch["pairedWithId"] = created.id;
+      patch["counterparty"] = `book:${target.id}`;
+      patch["incomeSource"] = outgoing ? "Отправка" : "Приход";
+    }
+  }
+
   await db.update(schema.expenses).set(patch).where(eq(schema.expenses.id, id));
 
   const categories = await listCategories(ledgerId);
   const updated = await expenseById(id);
-  const rate = await baseRate(user, today());
+  const rate = await baseRate(user, localToday(request.user.timezone));
 
   if (updated) {
     const card = await buildCard(user, ledgerId, updated);
@@ -698,7 +766,7 @@ app.get("/api/analytics", async (request) => {
     .parse(request.query);
 
   const { user, ledgerId } = request;
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
 
   // Произвольный диапазон приходит датами; пресеты считаются по ключу.
   const period =
@@ -752,7 +820,7 @@ app.get("/api/analytics", async (request) => {
  */
 app.get("/api/review", async (request) => {
   const { user, ledgerId } = request;
-  const rate = await baseRate(user, today());
+  const rate = await baseRate(user, localToday(request.user.timezone));
 
   const rows = await db.query.expenses.findMany({
     where: and(
@@ -907,7 +975,7 @@ app.post("/api/books/active", async (request, reply) => {
  */
 app.get("/api/balance", async (request) => {
   const { user, ledgerId } = request;
-  const rate = await baseRate(user, today());
+  const rate = await baseRate(user, localToday(request.user.timezone));
 
   const [places, entries] = await Promise.all([
     balanceByPlace(ledgerId),
@@ -918,7 +986,7 @@ app.get("/api/balance", async (request) => {
   // вопрос «сколько у меня всего», а он всегда о сегодняшнем дне.
   let totalUsd = 0;
   for (const place of places) {
-    totalUsd += place.amount * (await rateToUsd(place.currency as Currency, today()));
+    totalUsd += place.amount * (await rateToUsd(place.currency as Currency, localToday(request.user.timezone)));
   }
 
   return {
@@ -962,7 +1030,7 @@ app.post("/api/balance", async (request) => {
     amount: body.amount,
     currency: body.currency,
     note: body.note ?? null,
-    happenedAt: body.happenedAt ?? today(),
+    happenedAt: body.happenedAt ?? localToday(request.user.timezone),
   });
 
   return { id: entry.id };
@@ -1058,7 +1126,7 @@ app.patch("/api/settings", async (request, reply) => {
  */
 app.get("/api/categories", async (request) => {
   const { ledgerId } = request;
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
   const from = shiftDay(todayDay, 29);
 
   const categories = await listCategories(ledgerId);
@@ -1257,7 +1325,7 @@ app.post("/api/export", async (request, reply) => {
     .object({ from: z.string().optional(), to: z.string().optional() })
     .parse(request.body ?? {});
 
-  const todayDay = today();
+  const todayDay = localToday(request.user.timezone);
   const from = query.from ?? `${todayDay.slice(0, 4)}-01-01`;
   const to = query.to ?? todayDay;
 

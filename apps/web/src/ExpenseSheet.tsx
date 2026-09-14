@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Category, type Expense } from "./api.js";
 import { CategorySheet } from "./CategorySheet.js";
 import { Confirm } from "./Confirm.js";
@@ -51,6 +51,16 @@ export function ExpenseSheet({
    */
   const [kind, setKind] = useState(expense.kind);
   const [movedTo, setMovedTo] = useState(expense.movedTo ?? "");
+  const [toBook, setToBook] = useState<number | null>(expense.toBook);
+  const [books, setBooks] = useState<{ id: number; title: string; active: boolean }[]>([]);
+
+  // Свои книги — куда ещё могут переехать деньги: выручку дела забирают себе.
+  useEffect(() => {
+    api
+      .books()
+      .then((result) => setBooks(result.books.filter((b) => !b.active)))
+      .catch(() => undefined);
+  }, []);
   const isIncome = kind === "income";
   const isTransfer = kind === "transfer";
   const [picking, setPicking] = useState(false);
@@ -79,7 +89,7 @@ export function ExpenseSheet({
         note: note.trim() === "" ? null : note.trim(),
         kind,
         ...(isIncome ? { incomeSource: source } : {}),
-        ...(isTransfer ? { movedTo: movedTo === "" ? null : movedTo } : {}),
+        ...(isTransfer ? { movedTo: movedTo === "" ? null : movedTo, toBook } : {}),
         ...(slug === null || kind !== "expense" ? {} : { categorySlug: slug }),
       });
       notify("success");
@@ -248,13 +258,29 @@ export function ExpenseSheet({
               {["", "Наличка", "Карта", "Крипта"].map((title) => (
                 <button
                   key={title === "" ? "none" : title}
-                  className={movedTo === title ? "pill on" : "pill ghost"}
+                  className={toBook === null && movedTo === title ? "pill on" : "pill ghost"}
                   onClick={() => {
                     tap();
                     setMovedTo(title);
+                    setToBook(null);
                   }}
                 >
                   {title === "" ? "никуда" : title}
+                </button>
+              ))}
+
+              {/* Своя книга: уход здесь и приход там — одна перенесённая сумма. */}
+              {books.map((book) => (
+                <button
+                  key={`book-${book.id}`}
+                  className={toBook === book.id ? "pill on" : "pill ghost"}
+                  onClick={() => {
+                    tap();
+                    setToBook(book.id);
+                    setMovedTo("");
+                  }}
+                >
+                  в «{book.title}»
                 </button>
               ))}
             </div>

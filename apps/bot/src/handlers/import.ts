@@ -12,6 +12,7 @@ import {
   applyRefund,
   createImportPreview,
   findTransferPair,
+  ledgersOf,
   linkTransferPair,
   refundAlreadyApplied,
   db,
@@ -28,6 +29,7 @@ import {
   today,
   userRules,
 } from "@costnote/core/data";
+import { localToday } from "@costnote/core/data";
 import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
 import { env } from "../env.js";
@@ -105,7 +107,7 @@ export async function handleDocument(
         applyMapping(
           sheet.rows.slice(0, MAX_ROWS),
           mapping,
-          today(),
+          localToday(user.timezone),
           sheetKind(`${sheet.name} ${sheet.rows[0]?.[0] ?? ""}`),
         ),
       ),
@@ -137,7 +139,7 @@ export async function handleDocument(
     });
 
     const base = user.currency as Currency;
-    const rate = await rateToUsd(base, today());
+    const rate = await rateToUsd(base, localToday(user.timezone));
 
     const spending = fresh.filter((r) => r.kind === "expense");
     const moving = fresh.filter((r) => r.kind !== "expense");
@@ -250,6 +252,9 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
   let moved = 0;
   let paired = 0;
 
+  // Пара к переносу ищется во всех книгах человека: выручку дела забирают себе.
+  const ownBooks = (await ledgersOf(user.id)).map((b) => b.id);
+
   for (const row of rows) {
     const currency = (row.currency ?? base) as Currency;
     const rate = await rateToUsd(currency, row.spentAt);
@@ -307,7 +312,7 @@ export async function applyImport(ctx: Context, user: AppUser, importId: number)
 
     // Пара к переносу могла прийти с выпиской другого счёта — ищем сразу.
     if (row.kind === "transfer" && saved !== undefined) {
-      const half = await findTransferPair(record.ledgerId, row.amount, row.spentAt, row.incoming);
+      const half = await findTransferPair(ownBooks, row.amount, row.spentAt, row.incoming);
       if (half !== undefined) {
         await linkTransferPair(saved.id, half.id);
         paired++;

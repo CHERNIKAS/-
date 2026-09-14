@@ -1,5 +1,5 @@
 import type { Currency } from "../index.js";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db, schema } from "./db.js";
 import { PAIR_WINDOW_DAYS, pairTolerance } from "../import/kinds.js";
 import { looksLikeTransfer, sameMerchant } from "../refunds.js";
@@ -201,18 +201,24 @@ export async function refundAlreadyApplied(
  * сумме и дате: другого общего у них нет, названия в выписках разные.
  */
 export async function findTransferPair(
-  ledgerId: number,
+  /**
+   * Все книги человека, а не одна: выручку дела забирают себе, и уход в книге
+   * «чайной» с приходом в личной — это одна и та же перенесённая сумма.
+   */
+  ledgerIds: number[],
   amount: number,
   spentAt: string,
   incoming: boolean,
 ): Promise<Expense | undefined> {
+  if (ledgerIds.length === 0) return undefined;
+
   const tolerance = pairTolerance(amount);
   const from = shiftDays(spentAt, -PAIR_WINDOW_DAYS);
   const to = shiftDays(spentAt, PAIR_WINDOW_DAYS);
 
   const candidates = await db.query.expenses.findMany({
     where: and(
-      eq(schema.expenses.ledgerId, ledgerId),
+      inArray(schema.expenses.ledgerId, ledgerIds),
       eq(schema.expenses.kind, "transfer"),
       isNull(schema.expenses.deletedAt),
       isNull(schema.expenses.pairedWithId),

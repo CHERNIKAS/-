@@ -2,6 +2,7 @@ import { categorize, classify, type Currency, parseMessage, resolveSpentAt } fro
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Context } from "grammy";
 import { db, schema } from "@costnote/core/data";
+import { localToday } from "@costnote/core/data";
 import { env } from "../env.js";
 import { expenseCard, incomeCard, refundCard } from "../format.js";
 import { cardKeyboard } from "../keyboards.js";
@@ -121,7 +122,8 @@ export async function saveExpenses(
   const options = categories.map((c) => ({ slug: c.slug, title: c.title, hint: c.hint }));
   const rules = await userRules(user.id);
   const corrections = await recentCorrections(user.id);
-  const todayDay = today();
+  // «Сегодня» по поясу человека: ночная трата не должна уезжать во вчера.
+  const todayDay = localToday(user.timezone);
 
   for (const entry of parsed) {
     const amount = entry.amount ?? 0;
