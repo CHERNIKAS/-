@@ -16,6 +16,8 @@ import {
   dueRecurring,
   ledgersOf,
   claimRecurring,
+  daySummaryText,
+  rememberDaySummary,
   pendingSuggestions,
   suggestionKey,
   totalUsd,
@@ -184,23 +186,12 @@ async function runCleanup(api: Api, users: AppUser[], now: Date): Promise<void> 
         .where(eq(schema.botMessages.id, card.id));
     }
 
-    const base = user.currency as Currency;
-    const rate = await rateToUsd(base, yesterday);
-    const books = await spentByBook(user, yesterday);
-    const total = books.reduce((sum, b) => sum + b.usd, 0);
-
-    // По всем книгам, а не по открытой: трата в «чайной» — тоже трата дня, и
-    // «итог $0» при ней выглядит как враньё.
-    const lines = [`<i>Итог дня</i>`, `<code>${moneyShort(total / rate, base)}</code>`];
-    if (books.filter((b) => b.usd > 0).length > 1) {
-      for (const book of books.filter((b) => b.usd > 0)) {
-        lines.push(`<i>${escapeHtml(book.title)}</i> <code>${moneyShort(book.usd / rate, base)}</code>`);
-      }
+    // Итог запоминается вместе с днём: поправят трату за вчера — он перепишется.
+    const { text } = await daySummaryText(user, yesterday);
+    const sent = await api.sendMessage(user.tgId, text, { parse_mode: "HTML" }).catch(() => undefined);
+    if (sent !== undefined) {
+      await rememberDaySummary(user.id, String(user.tgId), sent.message_id, yesterday);
     }
-
-    await api
-      .sendMessage(user.tgId, lines.join(String.fromCharCode(10)), { parse_mode: "HTML" })
-      .catch(() => undefined);
   }
 }
 

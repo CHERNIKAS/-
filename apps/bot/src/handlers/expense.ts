@@ -12,6 +12,7 @@ import {
   applyRefund,
   createExpense,
   expensesOfMessage,
+  refreshDaySummaries,
   messageRefundFingerprint,
   removeExpense,
   revertMessageRefunds,
@@ -270,6 +271,13 @@ export async function saveExpenses(
   await refreshPanel(ctx.api, user, shownId, chatId).catch(() => undefined);
 
   await notifyPartners(ctx, user, ledgerId, parsed.length).catch(() => undefined);
+
+  // Трата задним числом («вчера такси 12») меняет уже отправленный итог того дня.
+  await refreshDaySummaries(
+    user,
+    parsed.map((entry) => resolveSpentAt(entry, todayDay)),
+    (chat, message, text) => ctx.api.editMessageText(chat, message, text, { parse_mode: "HTML" }),
+  ).catch(() => undefined);
 }
 
 /**
@@ -350,6 +358,7 @@ export async function handleEditedMessage(
   if (!original) return;
 
   const previous = await expensesOfMessage(original.id);
+  const oldDays = previous.map((e) => e.spentAt);
   const removed: number[] = [];
   for (const expense of previous) removed.push(...(await removeExpense(expense)));
 
@@ -381,4 +390,9 @@ export async function handleEditedMessage(
   // Префикс книги в правленом тексте работает так же, как в новом сообщении.
   const routed = await routeByPrefix(user, text, ledgerId);
   await saveExpenses(ctx, user, routed.ledgerId, chatId, routed.text, original.id);
+
+  // Дни, с которых траты правкой ушли, тоже пересчитываются.
+  await refreshDaySummaries(user, oldDays, (chat, message, text) =>
+    ctx.api.editMessageText(chat, message, text, { parse_mode: "HTML" }),
+  ).catch(() => undefined);
 }

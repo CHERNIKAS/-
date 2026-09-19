@@ -11,6 +11,7 @@ import {
   categoryBySlug,
   expenseById,
   listCategories,
+  refreshDaySummaries,
   removeExpense,
   setCategory,
   totalSince,
@@ -120,6 +121,9 @@ export async function handleCallback(
       // Вместе с встречной строкой переноса и движением по балансу.
       await removeExpense(expense);
       await ctx.editMessageText("<i>Трата удалена</i>", { parse_mode: "HTML" });
+      await refreshDaySummaries(user, [expense.spentAt], (chat, message, text) =>
+        ctx.api.editMessageText(chat, message, text, { parse_mode: "HTML" }),
+      ).catch(() => undefined);
       await ctx.answerCallbackQuery("Удалено");
       return;
     }

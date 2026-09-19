@@ -324,6 +324,8 @@ export const botMessages = pgTable(
     messageId: integer("message_id").notNull(),
     kind: botMessageKindEnum().notNull(),
     expenseId: integer("expense_id").references(() => expenses.id, { onDelete: "cascade" }),
+    /** За какой день итог — у сообщений «Итог дня»; по нему итог переписывается после правок. */
+    summaryDay: date("summary_day"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     cleanedAt: timestamp("cleaned_at", { withTimezone: true }),
   },

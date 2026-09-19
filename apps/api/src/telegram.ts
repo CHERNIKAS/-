@@ -260,3 +260,9 @@ export async function removeCards(token: string, expenseId: number): Promise<voi
       .where(eq(schema.botMessages.id, card.id));
   }
 }
+
+/** Правка отправленного ботом сообщения — для пересчёта «Итога дня». */
+export function summaryEditor(token: string) {
+  return (chatId: string, messageId: number, text: string) =>
+    call(token, "editMessageText", { chat_id: chatId, message_id: messageId, text, parse_mode: "HTML" });
+}

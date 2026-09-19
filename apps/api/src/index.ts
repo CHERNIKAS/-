@@ -38,6 +38,7 @@ import {
   recentBalanceEntries,
   removeBalanceEntry,
   removeExpense,
+  refreshDaySummaries,
   UNCATEGORIZED,
   createSharedLedger,
   MAX_LEDGERS,
@@ -74,6 +75,7 @@ import {
   refundText,
   refreshPanel,
   removeCards,
+  summaryEditor,
   sendCard,
   sendPlain,
   updateCard,
@@ -558,6 +560,8 @@ app.post("/api/expenses", async (request, reply) => {
 
   // Итог дня в закрепе тоже меняется — трата добавилась.
   await refreshPanel(BOT_TOKEN, user, ledgerId).catch(() => undefined);
+  // Трата задним числом меняет уже отправленный итог того дня.
+  await refreshDaySummaries(user, created.map((e) => e.spentAt), summaryEditor(BOT_TOKEN)).catch(() => undefined);
 
   // Возврат в чат тоже уходит: иначе трата в приложении молча уменьшилась, и
   // человек ищет, куда делись деньги.
@@ -806,6 +810,10 @@ app.patch("/api/expenses/:id", async (request, reply) => {
   // Итог дня в закрепе меняется и от правки: поправил дату — «сегодня» стало
   // другим, а панель продолжала показывать вчерашнее.
   await refreshPanel(BOT_TOKEN, user, ledgerId).catch(() => undefined);
+  // И отправленный «Итог дня» — за старый и за новый день траты.
+  await refreshDaySummaries(user, [expense.spentAt, updated?.spentAt ?? expense.spentAt], summaryEditor(BOT_TOKEN)).catch(
+    () => undefined,
+  );
 
   return { expense: updated ? serialize(updated, categories, rate) : null };
 });
@@ -829,6 +837,7 @@ app.delete("/api/expenses/:id", async (request, reply) => {
     await removeCards(BOT_TOKEN, removedId).catch(() => undefined);
   }
   await refreshPanel(BOT_TOKEN, request.user, request.ledgerId).catch(() => undefined);
+  await refreshDaySummaries(request.user, [expense.spentAt], summaryEditor(BOT_TOKEN)).catch(() => undefined);
 
   return { ok: true };
 });
@@ -957,12 +966,14 @@ const reviewSchema = z.object({
 });
 
 app.patch("/api/review", async (request) => {
-  const { ledgerId } = request;
+  const { ledgerId, user } = request;
+  const touchedDays: string[] = [];
   const { decisions } = reviewSchema.parse(request.body);
 
   for (const decision of decisions) {
     const row = await expenseById(decision.id);
     if (row === undefined || row.ledgerId !== ledgerId) continue;
+    touchedDays.push(row.spentAt);
 
     // Перевод хранит направление в источнике: «Приход» или «Отправка». Раньше
     // решение «мои деньги» его стирало, и знак в балансе и сведение пар ломались.
@@ -985,6 +996,7 @@ app.patch("/api/review", async (request) => {
       .where(eq(schema.expenses.id, row.id));
   }
 
+  await refreshDaySummaries(user, touchedDays, summaryEditor(BOT_TOKEN)).catch(() => undefined);
   return { ok: true };
 });
 

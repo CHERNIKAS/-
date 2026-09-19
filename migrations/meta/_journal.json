@@ -127,6 +127,13 @@
       "when": 1789418485961,
       "tag": "0017_message-link-and-confirm",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789823744049,
+      "tag": "0018_summary-day",
+      "breakpoints": true
     }
   ]
 }
