@@ -12,6 +12,8 @@ import {
   applyRefund,
   createExpense,
   expensesOfMessage,
+  partnerNotice,
+  type NoticeItem,
   refreshDaySummaries,
   messageRefundFingerprint,
   removeExpense,
@@ -129,6 +131,8 @@ export async function saveExpenses(
   const corrections = await recentCorrections(user.id);
   // «Сегодня» по поясу человека: ночная трата не должна уезжать во вчера.
   const todayDay = localToday(user.timezone);
+  // Что записано — для уведомления партнёрам по общей книге.
+  const notice: NoticeItem[] = [];
 
   for (const entry of parsed) {
     const amount = entry.amount ?? 0;
@@ -142,6 +146,7 @@ export async function saveExpenses(
       const target = await findRefundTarget(ledgerId, amount, currency, spentAt, entry.merchant);
 
       if (target !== undefined) {
+        notice.push({ kind: "refund", amount, currency, title: target.merchant ?? "" });
         await applyRefund(
           target.id,
           amount,
@@ -181,6 +186,7 @@ export async function saveExpenses(
         incomeSource: entry.incomeSource,
         rawInputId,
       });
+      notice.push({ kind: "income", amount, currency, title: entry.merchant || (entry.incomeSource ?? "") });
 
       await ctx.reply(
         incomeCard({
@@ -229,6 +235,7 @@ export async function saveExpenses(
       needsReview: decision.needsReview,
       rawInputId,
     });
+    notice.push({ kind: "expense", amount, currency, title: decision.merchant || (category?.title ?? "") });
 
     const baseRate = await rateToUsd(base, spentAt);
     const dayTotalUsd = await totalSince(ledgerId, todayDay);
@@ -270,7 +277,7 @@ export async function saveExpenses(
   const shownId = await activeLedgerId(user).catch(() => ledgerId);
   await refreshPanel(ctx.api, user, shownId, chatId).catch(() => undefined);
 
-  await notifyPartners(ctx, user, ledgerId, parsed.length).catch(() => undefined);
+  await notifyPartners(ctx, user, ledgerId, notice).catch(() => undefined);
 
   // Трата задним числом («вчера такси 12») меняет уже отправленный итог того дня.
   await refreshDaySummaries(
@@ -284,26 +291,20 @@ export async function saveExpenses(
  * Уведомление остальным участникам общей книги.
  *
  * Одно сообщение на всё внесённое разом: человек, записавший подряд три
- * покупки, не должен превращаться в три уведомления у партнёра.
+ * покупки, не должен превращаться в три уведомления у партнёра. И с самими
+ * операциями — «записал трату» без суммы ничего не говорило.
  */
 async function notifyPartners(
   ctx: Context,
   user: AppUser,
   ledgerId: number,
-  count: number,
+  items: NoticeItem[],
 ): Promise<void> {
-  const members = await membersOf(ledgerId);
-  if (members.length < 2) return;
+  const notice = await partnerNotice(user, ledgerId, items);
+  if (notice === null) return;
 
-  const name = user.firstName ?? user.username ?? "партнёр";
-  const text =
-    count === 1
-      ? `${name} записал трату в общий бюджет`
-      : `${name} записал ${plural(count, "трату", "траты", "трат")} в общий бюджет`;
-
-  for (const member of members) {
-    if (member.userId === user.id) continue;
-    await ctx.api.sendMessage(member.tgId, text).catch(() => undefined);
+  for (const chat of notice.recipients) {
+    await ctx.api.sendMessage(chat, notice.text, { parse_mode: "HTML" }).catch(() => undefined);
   }
 }
 

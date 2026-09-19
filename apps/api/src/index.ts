@@ -38,6 +38,7 @@ import {
   recentBalanceEntries,
   removeBalanceEntry,
   removeExpense,
+  partnerNotice,
   refreshDaySummaries,
   UNCATEGORIZED,
   createSharedLedger,
@@ -562,6 +563,21 @@ app.post("/api/expenses", async (request, reply) => {
   await refreshPanel(BOT_TOKEN, user, ledgerId).catch(() => undefined);
   // Трата задним числом меняет уже отправленный итог того дня.
   await refreshDaySummaries(user, created.map((e) => e.spentAt), summaryEditor(BOT_TOKEN)).catch(() => undefined);
+
+  // Партнёрам по общей книге — что именно добавлено: из приложения раньше не
+  // приходило ничего.
+  const notice = await partnerNotice(user, ledgerId, [
+    ...created.map((e) => ({
+      kind: e.kind === "income" ? ("income" as const) : ("expense" as const),
+      amount: Number(e.amount),
+      currency: e.currency as Currency,
+      title: e.merchant ?? e.incomeSource ?? "",
+    })),
+    ...refunds.map((r) => ({ kind: "refund" as const, amount: r.amount, currency: r.currency, title: r.merchant })),
+  ]).catch(() => null);
+  for (const chat of notice?.recipients ?? []) {
+    await sendPlain(BOT_TOKEN, chat, notice?.text ?? "").catch(() => undefined);
+  }
 
   // Возврат в чат тоже уходит: иначе трата в приложении молча уменьшилась, и
   // человек ищет, куда делись деньги.

@@ -14,3 +14,4 @@ export * from "./clock.js";
 export * from "./panel.js";
 export * from "./oauth.js";
 export * from "./summary.js";
+export * from "./partners.js";
