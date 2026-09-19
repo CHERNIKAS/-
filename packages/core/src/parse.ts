@@ -342,7 +342,33 @@ function normalizeAmount(token: string): number {
 
 /** Разбор целого сообщения: несколько трат одной строкой или в столбик. */
 export function parseMessage(input: string): ParsedEntry[] {
-  return splitEntries(input).map(parseEntry);
+  const parts = splitEntries(input);
+
+  // Кусок, в котором только дата, — это дата для трат сообщения, а не трата:
+  // «бумажки 100 лир, 15.09» раньше давало вторую трату на $15.09.
+  const dates = parts.map(standaloneDate);
+  const hint = dates.find((d) => d !== null) ?? null;
+  const entries = parts.filter((_, i) => dates[i] === null).map(parseEntry);
+
+  if (hint === null || entries.length === 0) return parts.map(parseEntry);
+
+  return entries.map((entry) =>
+    entry.dateHint === null && entry.daysAgo === 0 ? { ...entry, dateHint: hint } : entry,
+  );
+}
+
+/** «15.09», «15/09», «15.09.2026» — и больше ничего в куске. */
+function standaloneDate(part: string): ParsedEntry["dateHint"] {
+  const match = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/u.exec(part.trim());
+  if (match === null) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = match[3] === undefined ? null : Number(match[3]);
+  const fullYear = year === null ? null : year < 100 ? 2000 + year : year;
+
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(month, fullYear)) return null;
+  return { day, month, year };
 }
 
 /**

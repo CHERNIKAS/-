@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseAmount, parseDate } from "./import/apply.js";
-import { daysInMonth, isRealDate, parseEntry, resolveSpentAt } from "./parse.js";
+import { daysInMonth, isRealDate, parseEntry, parseMessage, resolveSpentAt } from "./parse.js";
 import { buildPeriod } from "./periods.js";
 import { hasMerchantWords } from "./refunds.js";
 
@@ -141,5 +141,37 @@ describe("периоды", () => {
     expect(buildPeriod("day", TODAY)).toMatchObject({ from: TODAY, to: TODAY });
     expect(buildPeriod("month", TODAY)).toMatchObject({ from: "2026-09-01", to: TODAY });
     expect(buildPeriod("year", TODAY)).toMatchObject({ from: "2026-01-01", to: TODAY });
+  });
+});
+
+const DAY17 = "2026-09-17";
+
+describe("дата отдельным куском сообщения", () => {
+  it("«бумажки 100 лир, 15.09» — одна трата за 15 сентября", () => {
+    const entries = parseMessage("бумажки для самокруток 100 лир, 15.09");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.amount).toBe(100);
+    expect(entries[0]?.currency).toBe("TRY");
+    expect(resolveSpentAt(entries[0]!, DAY17)).toBe("2026-09-15");
+  });
+
+  it("дата относится ко всем тратам сообщения без своей даты", () => {
+    const entries = parseMessage("кофе 3$, такси 10$, 15.09");
+    expect(entries.map((e) => resolveSpentAt(e, DAY17))).toEqual(["2026-09-15", "2026-09-15"]);
+  });
+
+  it("своя дата у траты главнее", () => {
+    const entries = parseMessage("кофе 3$ вчера, такси 10$, 15.09");
+    expect(resolveSpentAt(entries[0]!, DAY17)).toBe("2026-09-16");
+    expect(resolveSpentAt(entries[1]!, DAY17)).toBe("2026-09-15");
+  });
+
+  it("одно число без трат — по-прежнему сумма", () => {
+    expect(parseMessage("15.09")[0]?.amount).toBe(15.09);
+    expect(parseMessage("кофе 4.50")[0]?.amount).toBe(4.5);
+  });
+
+  it("невозможная дата — это сумма", () => {
+    expect(parseMessage("кофе 4$, 3.20")).toHaveLength(2);
   });
 });
